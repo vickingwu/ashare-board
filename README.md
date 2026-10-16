@@ -16,15 +16,15 @@ make update    # 抓数据、生成 data/*.json（首次约 30–60 秒）
 make serve     # 启动本地服务，然后打开 http://localhost:8000/
 ```
 
-为什么不能直接双击 `web/index.html`：页面用 `fetch` 读取 `data/*.json`，浏览器在 `file://` 下会拦截这类请求，所以必须经由 `serve.py`（只监听 127.0.0.1，纯标准库）。
+`web/index.html` 不要直接在浏览器里打开：面板数据是页面加载后用 `fetch` 向 `/data/*.json` 要来的，而浏览器不允许 `file://` 页面发起 `fetch`，结果就是每个面板都报「数据加载失败」。`make serve` 背后的 `serve.py` 用标准库起一个只监听 127.0.0.1 的 HTTP 服务，把 `web/` 和 `data/` 挂在同一个端口下，页面才取得到数据。
 
 ## 手工更新流程
 
-- 交易日 **16:30 之后**运行 `make update`，拿到的是当日收盘后的总市值。
+- 交易日 **16:30 之后**运行 `make update`，拿到的是当日收盘后的总市值（前提：当天还没跑过，见下面「当日缓存」）。
 - 盘中运行也可以，会得到盘中快照，面板「看板说明」里会标注抓取时间。
 - 任一面板失败不影响其它面板：失败面板保留上一版 JSON，页面顶部该面板会出现黄色徽标「本次更新失败，显示 … 的上一版数据」，`data/manifest.json` 里记录错误原因。
 - 只刷一个面板：`make update-only P=coverage`。
-- 当日缓存：成分名单与行情按日期缓存在 `cache/`，同一天重跑不再联网（约 1 秒）。
+- 当日缓存：成分名单与行情按日期缓存在 `cache/`，同一天重跑不再联网（约 1 秒）。**这也意味着白天跑过一次之后，当天再跑拿到的仍是那一次的盘中快照**；想换成收盘市值，先 `make clean-cache` 清掉当日缓存，再 `make update`。
 
 ## 目录结构
 
@@ -48,7 +48,7 @@ ashare-board/
 ├── data/                    # ETL 输出，入库（clone 下来即可直接看）
 ├── cache/  logs/            # 运行期产物，不入库
 ├── tests/                   # 离线单元测试（unittest）
-├── serve.py                 # 本地静态服务器
+├── serve.py                 # 本地 HTTP 服务（web/ + /data/，只监听 127.0.0.1）
 ├── Makefile  requirements.txt  NOTICE.md
 ```
 

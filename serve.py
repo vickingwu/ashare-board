@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""本地静态服务器：把 web/ 当作站点根目录，把 data/ 挂到 /data/。
+"""本地 HTTP 服务：把 web/ 当作站点根目录，把 data/ 挂到 /data/。
 
 用法：python3 serve.py [端口]      默认 8000，只监听 127.0.0.1。
-为什么不能直接双击 index.html：页面要用 fetch 读取 data/*.json，浏览器在 file:// 下会拦截。
+需要它的原因：面板数据靠 fetch 取 /data/*.json，而浏览器不允许 file:// 页面发起 fetch，
+所以 index.html 得通过这个服务打开，而不是直接从磁盘打开。
 
 路由：
     /            -> web/index.html
