@@ -1,0 +1,211 @@
+/* A股看板 —— 主题与版式。无外部字体、无外部 URL。 */
+:root {
+  --bg: #F7F8FA;
+  --fg: #1F2328;
+  --muted: #6B7280;
+  --card: #FFFFFF;
+  --border: #E5E7EB;
+  --accent: #1F5FBF;
+  --up: #D64541;     /* 涨：红 */
+  --down: #1E9E5A;   /* 跌：绿 */
+  --header-h: 64px;
+  /* 七个指数颜色由 js/app.js 在启动时写入 --idx-000300 … --idx-uncovered */
+}
+
+* { box-sizing: border-box; }
+
+html {
+  scroll-padding-top: calc(var(--header-h) + 8px);
+}
+/* 平滑滚动只在页面就位后启用（由 app.js 添加），避免与深链接首屏定位互相干扰 */
+html.smooth { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
+        'Microsoft YaHei', 'Noto Sans CJK SC', 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- 顶栏 ---------- */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: saturate(160%) blur(6px);
+  border-bottom: 1px solid var(--border);
+}
+.site-header-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 10px 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 24px;
+}
+.site-header h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+}
+.nav-link {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 4px 0;
+  border-bottom: 2px solid transparent;
+  font-size: 14px;
+}
+.nav-link:hover { color: var(--fg); }
+.nav-link.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ---------- 新鲜度条 ---------- */
+.freshness {
+  max-width: 1200px;
+  margin: 14px auto 0;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  background: #EEF1F5;
+  border-left: 4px solid #B0B7C3;
+}
+.freshness code { font-size: 12px; background: rgba(0, 0, 0, 0.05); padding: 1px 5px; border-radius: 4px; }
+.fresh-green { background: #E8F6EE; border-left-color: #1E9E5A; color: #14613A; }
+.fresh-amber { background: #FFF6E0; border-left-color: #E0A100; color: #6B4E00; }
+.fresh-red   { background: #FCE9E8; border-left-color: #D64541; color: #7A1F1C; }
+
+/* ---------- 面板卡片 ---------- */
+.main { padding: 0 0 40px; }
+.panel {
+  max-width: 1200px;
+  margin: 18px auto;
+  padding: 20px 24px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+.panel-head h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  flex: 1 1 auto;
+}
+.btn-export {
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 12px;
+  color: var(--accent);
+  background: #fff;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.btn-export:hover { background: #EEF3FB; }
+.btn-export:disabled { opacity: 0.5; cursor: default; }
+.panel-subtitle { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+.panel-asof { margin: 2px 0 12px; color: var(--muted); font-size: 12.5px; }
+.panel-badge-stale {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #FFF6E0;
+  color: #6B4E00;
+  border: 1px solid #E0A100;
+  font-size: 12px;
+}
+.panel-body { min-height: 420px; position: relative; }
+.panel-body h3 { font-size: 15px; margin: 22px 0 8px; font-weight: 600; }
+.panel-loading { color: var(--muted); font-size: 13px; padding: 20px 0; }
+.panel-error {
+  margin: 12px 0;
+  padding: 12px 16px;
+  border-left: 4px solid var(--up);
+  background: #FCE9E8;
+  color: #7A1F1C;
+  border-radius: 6px;
+  font-size: 14px;
+}
+details.panel-notes {
+  margin-top: 14px;
+  border-top: 1px dashed var(--border);
+  padding-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+details.panel-notes summary { cursor: pointer; color: var(--fg); font-weight: 500; }
+details.panel-notes ul { margin: 6px 0 0; padding-left: 20px; }
+details.panel-notes li { margin: 3px 0; }
+
+/* ---------- 图例、滚动容器 ---------- */
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 4px 0 10px; font-size: 13px; color: var(--muted); }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+.scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.scroll-x > .chart-wide { min-width: 860px; }
+.chart { width: 100%; }
+.chart-note { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+
+/* ---------- 表格 ---------- */
+table.data-table {
+  border-collapse: collapse;
+  font-size: 13.5px;
+  margin: 6px 0 0;
+}
+table.data-table caption {
+  caption-side: bottom;
+  text-align: left;
+  color: var(--muted);
+  font-size: 12.5px;
+  padding: 6px 0 0;
+}
+table.data-table th,
+table.data-table td {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+table.data-table th { background: #F3F4F6; font-weight: 600; }
+table.data-table th[scope="row"] { text-align: left; }
+table.data-table thead th:first-child { text-align: left; }
+
+table.loss-table td.na { color: #9CA3AF; text-align: center; }
+table.loss-table td.deep { color: #fff; }
+table.recovery-table { margin-top: 8px; }
+table.overlap-table td.strong { color: #fff; }
+
+/* ---------- 窄屏 ---------- */
+@media (max-width: 768px) {
+  :root { --header-h: 84px; }
+  .site-header-inner { padding: 8px 12px; gap: 2px 14px; }
+  .site-header h1 { font-size: 16px; }
+  .nav-link { font-size: 13px; }
+  .freshness { margin: 10px 10px 0; font-size: 12px; }
+  .panel { margin: 12px 10px; padding: 12px 12px 10px; border-radius: 10px; }
+  .panel-head h2 { font-size: 17px; }
+  .panel-subtitle { font-size: 13px; }
+  .panel-asof .asof-suffix { display: none; }
+  .panel-body { min-height: 0 !important; }
+  table.data-table { font-size: 12px; }
+  table.data-table th, table.data-table td { padding: 4px 6px; }
+}

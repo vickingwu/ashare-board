@@ -1,0 +1,21 @@
+{
+ "generated": "2026-10-16T16:24:26+08:00",
+ "panels": {
+  "coverage": {
+   "ok": true,
+   "asOf": "2026-10-16",
+   "generated": "2026-10-16T16:24:26+08:00",
+   "error": null,
+   "durationSec": 0.1,
+   "static": false
+  },
+  "loss": {
+   "ok": true,
+   "asOf": "2026-10-16",
+   "generated": "2026-10-16T16:24:26+08:00",
+   "error": null,
+   "durationSec": 0.0,
+   "static": true
+  }
+ }
+}
