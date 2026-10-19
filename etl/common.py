@@ -5,7 +5,9 @@
 * 单线程、单并发：所有 HTTP 请求都经过 ``http_get``，按主机维护最小间隔；
 * 指数退避重试：5 次，2s → 4s → 8s → 16s（上限 60s）；
 * 失败只影响当前面板：抛 ``PanelError`` 或任何异常，由编排器隔离；
-* 写文件一律先写 ``*.json.tmp`` 再 ``os.replace``，前端永远读不到半截文件。
+* 写文件一律先写 ``*.json.tmp`` 再 ``os.replace``，前端永远读不到半截文件；
+* 长历史数据源（指数日行情、PE、国债收益率）的缓存按「当天 16:00 前/后」判断能否复用
+  （``cache_is_fresh``）：收盘前抓的缓存只在收盘前复用，收盘后抓的当天一直复用。
 """
 from __future__ import annotations
 
@@ -36,10 +38,20 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
-# 每个主机两次请求之间的最小间隔（秒）。腾讯行情是批量接口，稍快一点即可。
-HOST_MIN_INTERVAL: Dict[str, float] = {"default": 0.5, "qt.gtimg.cn": 0.3}
+# 每个主机两次请求之间的最小间隔（秒）。腾讯行情是批量接口，稍快一点即可；
+# 乐咕与中债登是单页面站点，放慢到 1 秒。
+HOST_MIN_INTERVAL: Dict[str, float] = {
+    "default": 0.5,
+    "qt.gtimg.cn": 0.3,
+    "web.ifzq.gtimg.cn": 0.3,
+    "www.csindex.com.cn": 0.6,
+    "legulegu.com": 1.0,
+    "yield.chinabond.com.cn": 1.0,
+}
 MAX_ATTEMPTS = 5
 BACKOFF_CAP = 60.0
+# A 股收盘后的整点；在此之前抓到的「当天」数据视为盘中值
+MARKET_CLOSE_HOUR = 16
 
 
 class PanelError(Exception):
@@ -62,6 +74,34 @@ def today_str() -> str:
 
 def today_compact() -> str:
     return now_sh().strftime("%Y%m%d")
+
+
+def market_closed(now: Optional[datetime] = None) -> bool:
+    """北京时间是否已过 MARKET_CLOSE_HOUR（16:00）。"""
+    now = now if now is not None else now_sh()
+    return now.astimezone(TZ).hour >= MARKET_CLOSE_HOUR
+
+
+def cache_is_fresh(fetched_at: Optional[str], now: Optional[datetime] = None) -> bool:
+    """同一天抓取的缓存能否直接复用。
+
+    规则：抓取日期必须是今天；若抓取时已收盘则一直可用，若抓取时未收盘则只在当前仍未收盘时可用。
+    于是「上午跑一次、晚上再跑一次」各联网一次，同一时段内重跑不联网。
+    ``fetched_at`` 为 ISO 8601 字符串（``iso_now()`` 的输出）；缺失或无法解析按不新鲜处理。
+    """
+    if not fetched_at or not isinstance(fetched_at, str):
+        return False
+    try:
+        t = datetime.fromisoformat(fetched_at)
+    except ValueError:
+        return False
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=TZ)
+    t = t.astimezone(TZ)
+    now = (now if now is not None else now_sh()).astimezone(TZ)
+    if t.date() != now.date():
+        return False
+    return market_closed(t) or not market_closed(now)
 
 
 # --------------------------------------------------------------------------- 日志

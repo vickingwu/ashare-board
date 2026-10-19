@@ -193,6 +193,60 @@ table.loss-table td.na { color: #9CA3AF; text-align: center; }
 table.loss-table td.deep { color: #fff; }
 table.recovery-table { margin-top: 8px; }
 table.overlap-table td.strong { color: #fff; }
+table.data-table th.sortable { cursor: pointer; user-select: none; }
+table.data-table th.sortable:hover { background: #E9EBEF; }
+table.data-table th.sortable[aria-sort="descending"]::after { content: ' \25BE'; color: var(--accent); }
+table.data-table th.sortable[aria-sort="ascending"]::after { content: ' \25B4'; color: var(--accent); }
+table.data-table td.pos { color: var(--up); }
+table.data-table td.neg { color: var(--down); }
+table.data-table td.dim { color: #9CA3AF; }
+
+/* ---------- 面板工具条、读数、图表高度 ---------- */
+.panel-tools { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; align-items: center; }
+.range-btn {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 10px;
+  color: var(--fg);
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.range-btn:hover { border-color: var(--accent); color: var(--accent); }
+.range-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.range-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.inline-select {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--fg);
+}
+.tools-label { font-size: 13px; color: var(--muted); margin-right: 2px; }
+.readout { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 6px 0 10px; font-size: 14px; color: var(--muted); }
+.readout strong { color: var(--fg); font-size: 16px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.chart-tall { height: 520px; }
+.chart-mid { height: 420px; }
+.chart-auto { min-height: 160px; }
+.formula {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'PingFang SC', 'Microsoft YaHei', monospace;
+}
+.val-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--muted); margin: 0 0 6px; }
+.val-legend .grad {
+  display: inline-block; width: 64px; height: 10px; border-radius: 5px; vertical-align: middle; margin: 0 6px;
+  background: linear-gradient(90deg, var(--down), #E6C84B, var(--up));
+}
+.badge-short {
+  display: inline-block; padding: 0 6px; border-radius: 999px; font-size: 11px; line-height: 16px;
+  background: #FFF6E0; color: #6B4E00; border: 1px solid #E0A100; margin-left: 4px; vertical-align: middle;
+}
 
 /* ---------- 窄屏 ---------- */
 @media (max-width: 768px) {
@@ -208,4 +262,9 @@ table.overlap-table td.strong { color: #fff; }
   .panel-body { min-height: 0 !important; }
   table.data-table { font-size: 12px; }
   table.data-table th, table.data-table td { padding: 4px 6px; }
+  .chart-tall { height: 380px; }
+  .chart-mid { height: 340px; }
+  .range-btn { padding: 4px 8px; font-size: 12px; }
+  .readout { font-size: 13px; gap: 2px 12px; }
+  .readout strong { font-size: 14px; }
 }
