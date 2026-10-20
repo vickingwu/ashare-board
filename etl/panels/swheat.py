@@ -8,10 +8,12 @@
 * 收盘来自申万指数分析日报表（价格指数，股息未计入）；基日 1999-12-30 = 1000 点，是 2000 年的基准；
 * 年 Y 的年末收盘 = 落在 ``[Y-12-20, Y-12-31]`` 内最后一条记录；年度涨跌幅 = 年末 ÷ 上年末 − 1；
   两端任一缺失即 ``null``，不用邻近日期顶替；
-* 各行业历史起点不同：16 个一级从 1999-12-30 起（``BASE_1999_CODES``），12 个从 2014-02-21 起（首个完整年 2015），
-  3 个（石油石化 / 环保 / 美容护理）从 2021-12-13 起（首个完整年 2022）。起点之前的格子为 ``null``；
-* 源数据本身可能有洞：煤炭（801950）在分析接口里 2017-01-23 → 2021-12-10 没有任何记录（四个字段全空），
-  于是 2017–2021 五个年度为 ``null``，列入该行业的 ``gapYears``，不用其它来源补、也不丢掉 2015–2016 的真实值。
+* 各行业历史起点不同：16 个一级从 1999-12-30 起（``BASE_1999_CODES``），11 个从 2014-02-21 起（首个完整年 2015），
+  4 个（石油石化 / 环保 / 美容护理 / 煤炭，煤炭见下一条）从 2021-12-13 起（首个完整年 2022）。起点之前的格子为 ``null``；
+* 同一代码可能被申万复用：煤炭（801950）在分析接口里 2014-02-21 → 2017-01-20 的行属于另一只小指数
+  （流通市值 231–418 亿元、成交额占比 0.1–0.3 %；2021-12-13 序列重新开始时流通市值 3416.68 亿元，才是煤炭的体量），
+  中间 2017-01-23 → 2021-12-10 没有任何记录。这段不能当煤炭用，由 ``SERIES_START`` 按代码截掉，截掉之后煤炭从
+  2022 年起有完整年度、``gapYears`` 为空。``gapYears`` 机制保留给真正的中间断档（断档年份为 ``null``，年化从断档后重新起算）；
   回填失败的特征是「同一年所有行业都缺」，由「每年 ≥ 10 个行业有数据」的自检兜底；
 * 年化只跨以上一完整年结尾的最近一段**连续**完整年度：``all`` 从 ``cagrYears.from`` 到 ``lastYear``
   （``cagrYears.all`` 为年数；没有断档时 from = firstYear），``y10 / y5 / y3`` 在连续完整年数不足时为 ``null``。
@@ -47,6 +49,11 @@ BASE_1999_CODES = frozenset({
     "801010", "801030", "801040", "801050", "801080", "801110", "801120", "801130",
     "801140", "801150", "801160", "801170", "801180", "801200", "801210", "801230",
 })
+# 按代码截掉起点之前的行：接口在这个日期之前用同一代码返回的是另一只指数。
+# 801950 煤炭：2014-02-21 → 2017-01-20 的行流通市值只有 231.56 → 417.51 亿元、成交额占比 0.26 → 0.11 %，
+# 2017-01-23 → 2021-12-10 无记录，2021-12-13 重新开始时流通市值 3416.68 亿元（同日 801960 石油石化也从这里起算）。
+# 前一段不是煤炭一级行业，不能标成煤炭的 2015 / 2016 年涨跌幅。
+SERIES_START: Dict[str, str] = {"801950": "2021-12-13"}
 
 
 def _r(x: Optional[float], nd: int = 2) -> Optional[float]:
@@ -57,6 +64,10 @@ def _one_industry(h: Dict[str, Any], years: List[int], as_of_year: int) -> Dict[
     """单个行业：年度涨跌幅、起始年、YTD、年化（排名在外层统一算）。"""
     name = h.get("name") or h["code"]
     dates, close = compute.drop_none(h["dates"], h["close"])
+    start = SERIES_START.get(h["code"])
+    if start:
+        kept = [(d, v) for d, v in zip(dates, close) if d >= start]
+        dates, close = [d for d, _ in kept], [v for _, v in kept]
     if not dates:
         raise PanelError(f"{name}（{h['code']}）没有任何收盘数据")
     compute.assert_ascending(dates, f"{name} 日期")
@@ -89,13 +100,16 @@ def _one_industry(h: Dict[str, Any], years: List[int], as_of_year: int) -> Dict[
             cagr[key] = None
         else:
             cagr[key] = _r(compute.cagr_over_years(dates, close, last_year, n))
+    ytd = compute.ytd_return(dates, close, as_of_year)
+    if ytd is not None and abs(ytd) >= MAX_ABS_RET:
+        raise PanelError(f"{name}（{h['code']}）{as_of_year} 年初至今 {ytd:.1f}% 超出 ±{MAX_ABS_RET:.0f}% 合理范围")
     return {
         "code": h["code"],
         "name": name,
         "firstYear": first_year,
         "gapYears": gap_years,
         "rets": [_r(r) for r in raw],
-        "ytd": _r(compute.ytd_return(dates, close, as_of_year)),
+        "ytd": _r(ytd),
         "ytdRank": None,
         "cagr": cagr,
         "cagrYears": {"all": n_all, "from": block_start if n_all else None},
@@ -166,6 +180,10 @@ def build() -> dict:
              "；".join(f"{y} 年起 {len(v)} 个" for y, v in sorted(late.items())) or "无")
 
     late_text = "；".join(f"{y} 年起：" + "、".join(v) for y, v in sorted(late.items()))
+    cut = [f"{names.get(c, c)}（{c}）{start} 之前" for c, start in sorted(SERIES_START.items()) if c in names]
+    for c, start in SERIES_START.items():
+        if c in names:
+            log.info("%s（%s）截掉 %s 之前的行：接口在该日期之前用同一代码返回的是另一只指数", names[c], c, start)
     notes = [
         "行业按申万 2021 版分类，共 31 个一级行业；指数基日 1999-12-30 = 1000 点，基日收盘作为 2000 年的基准。"
         "接口返回的是价格指数，股息未计入，长期年化会低于含股息再投资的口径。",
@@ -175,6 +193,9 @@ def build() -> dict:
         "年化只用连续的完整自然年：「全程」从各行业最近一段连续有数据的首个完整年到上一完整年（表头括号内为年数），"
         "10 / 5 / 3 年按最近的完整年数回推；完整年数不够或中间有断档的格子留空。各行业「全程」起点不同，不能横向比大小。",
     ]
+    if cut:
+        notes.append("申万接口对以下代码在较早年份返回的是另一只指数的数据（流通市值与成交额占比只有后来的十分之一左右，"
+                     "之后还有数年没有记录），这段不计入该行业，年度表从接口重新开始的年份起算：" + "；".join(cut) + "。")
     if gapped:
         notes.append("以下行业在申万接口里有整段缺失，对应年份留空、不用其它来源补，年化从缺失之后重新起算："
                      + "；".join(gapped) + "。")

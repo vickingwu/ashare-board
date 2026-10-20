@@ -187,7 +187,7 @@
     function renderCrumbs() {
       crumbHost.innerHTML = '';
       if (state.level === 1) {
-        C.crumbs(crumbHost, ['一级行业（31）']);
+        C.crumbs(crumbHost, ['一级行业（' + d.level1.length + '）']);
       } else {
         C.crumbs(crumbHost, ['一级行业', state.parentName + '（二级）'], function () {
           state.level = 1; state.parent = null; state.parentName = null;

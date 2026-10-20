@@ -9,8 +9,8 @@ from etl.panels import swheat
 AS_OF = "2026-10-16"
 GROUP_1999 = sorted(swheat.BASE_1999_CODES)                       # 16 个，基日 1999-12-30
 GROUP_2014 = ["801710", "801720", "801730", "801740", "801750", "801760",
-              "801770", "801780", "801790", "801880", "801890", "801950"]   # 12 个，2014-02-21 起
-GROUP_2021 = ["801960", "801970", "801980"]                       # 3 个，2021-12-13 起
+              "801770", "801780", "801790", "801880", "801890"]             # 11 个，2014-02-21 起
+GROUP_2021 = ["801960", "801970", "801980", "801950"]             # 4 个，2021-12-13 起（煤炭见 SERIES_START）
 
 
 def _year_end_series(first_full_year, prefix_rows=()):
@@ -59,15 +59,18 @@ class SwheatComputeTest(unittest.TestCase):
         self.assertEqual(len(d["industries"]), 31)
         self.assertEqual(d["nByYear"][0], 16)
         self.assertEqual(d["nByYear"][-1], 31)
-        self.assertEqual(d["nByYear"][d["years"].index(2015)], 28)
+        self.assertEqual(d["nByYear"][d["years"].index(2015)], 27)
+        self.assertEqual(d["nByYear"][d["years"].index(2021)], 27)
+        self.assertEqual(d["nByYear"][d["years"].index(2022)], 31)
         self.assertEqual(d["nYtd"], 31)
 
     def test_first_year_and_null_prefix(self):
         self.assertEqual(self.by["801010"]["firstYear"], 2000)
-        self.assertEqual(self.by["801950"]["firstYear"], 2015)
+        self.assertEqual(self.by["801710"]["firstYear"], 2015)
+        self.assertEqual(self.by["801950"]["firstYear"], 2022)
         self.assertEqual(self.by["801960"]["firstYear"], 2022)
         years = self.data["years"]
-        r = self.by["801950"]["rets"]
+        r = self.by["801710"]["rets"]
         self.assertTrue(all(x is None for x in r[:years.index(2015)]))
         self.assertTrue(all(x == 10.0 for x in r[years.index(2015):]))
         self.assertEqual(self.by["801960"]["rets"][years.index(2021)], None)
@@ -111,6 +114,51 @@ class SwheatComputeTest(unittest.TestCase):
         for ind in self.data["industries"]:
             self.assertEqual(ind["gapYears"], [])
             self.assertEqual(ind["cagrYears"]["from"], ind["firstYear"])
+
+    def test_series_start_drops_orphaned_segment(self):
+        """801950 真实形状：2014-02-21 起一段别的指数、2017-01-20 后断档、2021-12-13 重新开始 → 起点之前全部不计。"""
+        hs = _histories()
+        coal = next(h for h in hs if h["code"] == "801950")
+        d, v = _year_end_series(2022, prefix_rows=[("2014-02-21", 997.49), ("2014-12-31", 1287.49),
+                                                   ("2015-12-31", 1986.21), ("2016-12-31", 1450.14),
+                                                   ("2017-01-20", 1511.21), ("2021-12-13", 2427.14)])
+        coal["dates"], coal["close"] = d, v
+        data = swheat.compute_panel(hs, AS_OF)
+        years = data["years"]
+        ind = next(i for i in data["industries"] if i["code"] == "801950")
+        self.assertEqual(ind["firstYear"], 2022)
+        self.assertEqual(ind["gapYears"], [])
+        self.assertTrue(all(ind["rets"][years.index(y)] is None for y in range(2000, 2022)))
+        self.assertTrue(all(ind["ranks"][years.index(y)] is None for y in range(2000, 2022)))
+        self.assertEqual(ind["rets"][years.index(2022)], 10.0)
+        self.assertEqual(ind["cagrYears"], {"all": 4, "from": 2022})
+        self.assertIsNone(ind["cagr"]["y10"])
+        self.assertIsNone(ind["cagr"]["y5"])
+        self.assertEqual(ind["cagr"]["y3"], 10.0)
+        self.assertEqual(data["nByYear"][years.index(2015)], 27)
+        self.assertEqual(data["nByYear"][years.index(2016)], 27)
+
+    def test_orphaned_segment_without_series_start_is_kept_as_gap(self):
+        """同样形状但代码不在 SERIES_START 里：按普通断档处理（2015–2016 保留、2017–2021 为 gapYears）。"""
+        hs = _histories()
+        other = next(h for h in hs if h["code"] == "801710")
+        d, v = _year_end_series(2022, prefix_rows=[("2014-02-21", 950.0), ("2014-12-31", 1000.0),
+                                                   ("2015-12-31", 1100.0), ("2016-12-31", 1210.0),
+                                                   ("2017-01-20", 1200.0), ("2021-12-13", 990.0)])
+        other["dates"], other["close"] = d, v
+        data = swheat.compute_panel(hs, AS_OF)
+        years = data["years"]
+        ind = next(i for i in data["industries"] if i["code"] == "801710")
+        self.assertEqual(ind["firstYear"], 2015)
+        self.assertEqual(ind["gapYears"], [2017, 2018, 2019, 2020, 2021])
+        self.assertEqual(ind["rets"][years.index(2015)], 10.0)
+        self.assertEqual(ind["cagrYears"], {"all": 4, "from": 2022})
+
+    def test_extreme_ytd_rejected(self):
+        hs = _histories()
+        hs[0]["close"][-1] = hs[0]["close"][-2] * 5.0                 # 年初至今 +400 %
+        with self.assertRaises(PanelError):
+            swheat.compute_panel(hs, AS_OF)
 
     def test_middle_gap_recorded_and_cagr_restarts(self):
         hs = _histories()
