@@ -11,7 +11,11 @@
 * 分位 = 含等号的份额：100 × #(历史值 ≤ 当前值) / 历史条数；
 * 年化 = (期末/期初)^(1/年数) − 1，年数 = 天数 / 365.25；
 * 收益拆解（加法）：全收益 = 股息 + 盈利 + 估值，其中 估值 = PE 期末/期初 − 1，
-  盈利 = 价格涨幅 − 估值，股息 = 全收益涨幅 − 价格涨幅。
+  盈利 = 价格涨幅 − 估值，股息 = 全收益涨幅 − 价格涨幅；
+* 自然年收益：年 Y 的「年末收盘」= 日期落在 ``[Y-12-20, Y-12-31]`` 内最后一条非空记录
+  （指数基日 1999-12-30 的 1000 点因此是 2000 年的基准）；年度涨跌幅 = 年末/上年末 − 1，
+  两端任一缺失即 None，不用邻近年份补；年化只跨完整年度；
+* 排名 ``rank_desc``：1 = 最大，相同值共享较小名次（1,2,2,4），None 不参与也不占名次。
 """
 from __future__ import annotations
 
@@ -157,6 +161,117 @@ def trailing_window(values: Sequence, n: int) -> Optional[list]:
     if n <= 0 or len(values) < n:
         return None
     return list(values[-n:])
+
+
+def rolling_mean(values: Sequence[Optional[float]], n: int) -> ValueList:
+    """n 日简单均值（含当日）；前 n−1 个位置、或窗口内任一值为 None 时为 None。"""
+    out: ValueList = []
+    for i in range(len(values)):
+        if i + 1 < n or n <= 0:
+            out.append(None)
+            continue
+        window = values[i + 1 - n:i + 1]
+        if any(v is None for v in window):
+            out.append(None)
+        else:
+            out.append(sum(window) / n)
+    return out
+
+
+def safe_div_pct(a: Optional[float], b: Optional[float], nd: int = 4) -> Optional[float]:
+    """a / b × 100 四舍五入到 nd 位；任一为 None 或 b 为 0 时返回 None。"""
+    if a is None or b is None or b == 0:
+        return None
+    return round(a / b * 100.0, nd)
+
+
+# --------------------------------------------------------------------------- 自然年
+def last_index_per_year(dates: Sequence[str]) -> Dict[int, int]:
+    """每个自然年最后一条记录的下标 {year: index}。dates 需升序。"""
+    out: Dict[int, int] = {}
+    for i, d in enumerate(dates):
+        out[int(d[:4])] = i
+    return out
+
+
+def year_end_close(dates: Sequence[str], values: Sequence[Optional[float]], year: int
+                   ) -> Optional[Tuple[str, float]]:
+    """年 ``year`` 的年末收盘 (date, value)：日期在 [year-12-20, year-12-31] 内最后一条非空记录；没有则 None。"""
+    lo, hi = f"{year:04d}-12-20", f"{year:04d}-12-31"
+    found: Optional[Tuple[str, float]] = None
+    for d, v in zip(dates, values):
+        if d > hi:
+            break
+        if d >= lo and v is not None:
+            found = (d, v)
+    return found
+
+
+def calendar_year_returns(dates: Sequence[str], values: Sequence[Optional[float]], years: Sequence[int]
+                          ) -> ValueList:
+    """各自然年涨跌幅（%）= 年末收盘 / 上年末收盘 − 1；任一端缺失或非正时为 None。"""
+    out: ValueList = []
+    for y in years:
+        base = year_end_close(dates, values, y - 1)
+        end = year_end_close(dates, values, y)
+        if base is None or end is None or base[1] <= 0:
+            out.append(None)
+        else:
+            out.append((end[1] / base[1] - 1.0) * 100.0)
+    return out
+
+
+def ytd_return(dates: Sequence[str], values: Sequence[Optional[float]], year: int) -> Optional[float]:
+    """年初至今涨跌幅（%）：``year`` 内最后一条非空值 vs 上年末收盘；任一缺失为 None。"""
+    base = year_end_close(dates, values, year - 1)
+    if base is None or base[1] <= 0:
+        return None
+    last: Optional[float] = None
+    prefix = f"{year:04d}-"
+    for d, v in zip(dates, values):
+        if d.startswith(prefix) and v is not None:
+            last = v
+        elif d > prefix + "12-31":
+            break
+    if last is None:
+        return None
+    return (last / base[1] - 1.0) * 100.0
+
+
+def first_full_year(dates: Sequence[str], values: Sequence[Optional[float]], years: Sequence[int]
+                    ) -> Optional[int]:
+    """``years`` 中第一个有完整年度涨跌幅（基准与年末都存在）的年份；没有则 None。"""
+    for y, r in zip(years, calendar_year_returns(dates, values, years)):
+        if r is not None:
+            return y
+    return None
+
+
+def cagr_over_years(dates: Sequence[str], values: Sequence[Optional[float]], last_year: int, n: int
+                    ) -> Optional[float]:
+    """最近 n 个完整自然年的年化（%）：从 ``last_year−n`` 年末到 ``last_year`` 年末；任一端缺失为 None。"""
+    if n <= 0:
+        return None
+    base = year_end_close(dates, values, last_year - n)
+    end = year_end_close(dates, values, last_year)
+    if base is None or end is None:
+        return None
+    return cagr(base[1], end[1], float(n))
+
+
+# --------------------------------------------------------------------------- 排名
+def rank_desc(values: Sequence[Optional[float]]) -> List[Optional[int]]:
+    """降序名次：1 = 最大；相同值共享较小名次（如 [3, None, 5, 3] → [2, None, 1, 2]）；None 保留。"""
+    present = sorted((v for v in values if v is not None), reverse=True)
+    rank_of: Dict[float, int] = {}
+    for i, v in enumerate(present):
+        if v not in rank_of:
+            rank_of[v] = i + 1
+    return [None if v is None else rank_of[v] for v in values]
+
+
+def count_not_none(values: Sequence) -> int:
+    return sum(1 for v in values if v is not None)
 
 
 # --------------------------------------------------------------------------- 统计

@@ -9,6 +9,7 @@
 
 约定：
 * 面板模块导出 PANEL_ID / TITLE / 可选 STATIC / build() -> {asOf, sources, notes, data}
+* 面板可导出 COMPACT_JSON = True，输出不缩进，用于大文件（默认 indent=1）
 * 任一面板失败不影响其它面板；失败面板的旧 JSON 保留，manifest 里 ok=false + error
 * 退出码：0 至少一个面板成功；1 全部失败；2 参数错误
 * 自测钩子：环境变量 ASHARE_FORCE_FAIL=coverage[,loss] 强制对应面板抛错（不发请求）
@@ -59,7 +60,7 @@ def build_one(mod, logger):
             "notes": list(res.get("notes", [])),
             "data": res["data"],
         }
-        write_json_atomic(out_path, envelope)
+        write_json_atomic(out_path, envelope, compact=bool(getattr(mod, "COMPACT_JSON", False)))
         dur = round(time.monotonic() - t0, 1)
         logger.info("面板 %s 完成，asOf=%s，%.1fs", pid, envelope["asOf"], dur)
         return {"ok": True, "asOf": envelope["asOf"], "generated": envelope["generated"],

@@ -7,7 +7,12 @@
 * 失败只影响当前面板：抛 ``PanelError`` 或任何异常，由编排器隔离；
 * 写文件一律先写 ``*.json.tmp`` 再 ``os.replace``，前端永远读不到半截文件；
 * 长历史数据源（指数日行情、PE、国债收益率）的缓存按「当天 16:00 前/后」判断能否复用
-  （``cache_is_fresh``）：收盘前抓的缓存只在收盘前复用，收盘后抓的当天一直复用。
+  （``cache_is_fresh``）：收盘前抓的缓存只在收盘前复用，收盘后抓的当天一直复用；
+  按「天数」过期的缓存（如行业父级映射）用 ``cache_age_days`` 判断；
+* TLS 一律严格校验，绝不关闭证书校验。个别站点（www.swsresearch.com）握手时不发中间证书，
+  把其公开的中间证书 PEM 放进 ``etl/certs/``，``ca_bundle_path()`` 会把 certifi 根证书与这些
+  PEM 拼成 ``cache/ca_bundle.pem`` 交给 Session；证书校验失败直接抛 ``PanelError``，不重试；
+* ``write_json_atomic(..., compact=True)`` 输出不缩进的紧凑 JSON，供体积较大的面板文件使用。
 """
 from __future__ import annotations
 
@@ -23,11 +28,14 @@ from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 import requests
+import requests.certs
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 CACHE_DIR = ROOT / "cache"
 LOGS_DIR = ROOT / "logs"
+CERTS_DIR = ROOT / "etl" / "certs"
+CA_BUNDLE_PATH = CACHE_DIR / "ca_bundle.pem"
 for _d in (DATA_DIR, CACHE_DIR, LOGS_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
@@ -47,6 +55,8 @@ HOST_MIN_INTERVAL: Dict[str, float] = {
     "www.csindex.com.cn": 0.6,
     "legulegu.com": 1.0,
     "yield.chinabond.com.cn": 1.0,
+    "www.swsresearch.com": 0.8,
+    "www.swhyresearch.com": 0.8,
 }
 MAX_ATTEMPTS = 5
 BACKOFF_CAP = 60.0
@@ -104,6 +114,23 @@ def cache_is_fresh(fetched_at: Optional[str], now: Optional[datetime] = None) ->
     return market_closed(t) or not market_closed(now)
 
 
+def cache_age_days(fetched_at: Optional[str], now: Optional[datetime] = None) -> Optional[float]:
+    """缓存距今的天数（可带小数）；``fetched_at`` 缺失或无法解析返回 None。
+
+    用于按「N 天」过期的慢变数据（如申万行业父级映射），与按交易日判断的 ``cache_is_fresh`` 互补。
+    """
+    if not fetched_at or not isinstance(fetched_at, str):
+        return None
+    try:
+        t = datetime.fromisoformat(fetched_at)
+    except ValueError:
+        return None
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=TZ)
+    now = (now if now is not None else now_sh()).astimezone(TZ)
+    return (now - t.astimezone(TZ)).total_seconds() / 86400.0
+
+
 # --------------------------------------------------------------------------- 日志
 _LOGGER_READY: set = set()
 
@@ -137,6 +164,38 @@ def _fmt_exc(e: BaseException) -> str:
     return f"{type(e).__name__}: {e}"[:200]
 
 
+# --------------------------------------------------------------------------- TLS
+def ca_bundle_path() -> str:
+    """返回 Session 应使用的 CA 文件路径。
+
+    ``etl/certs/`` 没有 ``*.pem`` 时直接用 requests 自带的 certifi 文件；否则把 certifi 内容与
+    每个 PEM 依次拼接成 ``cache/ca_bundle.pem``（先写 ``.tmp`` 再 ``os.replace``），
+    仅在 bundle 缺失或比任一来源旧时重建。BEGIN/END 之外的注释文本会被 OpenSSL 忽略，
+    所以 PEM 文件头部可以带说明。
+    """
+    certifi_path = Path(requests.certs.where())
+    extra = sorted(CERTS_DIR.glob("*.pem")) if CERTS_DIR.is_dir() else []
+    if not extra:
+        return str(certifi_path)
+    sources = [certifi_path] + extra
+    if CA_BUNDLE_PATH.is_file():
+        built_at = CA_BUNDLE_PATH.stat().st_mtime
+        if all(p.stat().st_mtime <= built_at for p in sources):
+            return str(CA_BUNDLE_PATH)
+    CA_BUNDLE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CA_BUNDLE_PATH.with_suffix(".pem.tmp")
+    with open(tmp, "wb") as fh:
+        for p in sources:
+            data = p.read_bytes()
+            fh.write(data)
+            if not data.endswith(b"\n"):
+                fh.write(b"\n")
+            fh.write(b"\n")
+    os.replace(tmp, CA_BUNDLE_PATH)
+    _log.debug("CA bundle 重建: certifi + %d 个 etl/certs PEM -> %s", len(extra), CA_BUNDLE_PATH)
+    return str(CA_BUNDLE_PATH)
+
+
 # --------------------------------------------------------------------------- HTTP
 _session: Optional[requests.Session] = None
 _last_request_at: Dict[str, float] = {}
@@ -151,6 +210,7 @@ def _get_session() -> requests.Session:
             "Accept": "*/*",
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
         })
+        s.verify = ca_bundle_path()
         _session = s
     return _session
 
@@ -170,7 +230,8 @@ def http_get(url: str, *, timeout: float = 30, headers: Optional[Dict[str, str]]
              ) -> Tuple[bytes, Dict[str, str]]:
     """GET 一个 URL，返回 (body, headers)。
 
-    单并发 + 主机限速 + 指数退避。429/5xx/网络错误重试；其它 4xx 立即抛 PanelError。
+    单并发 + 主机限速 + 指数退避。429/5xx/网络错误重试；其它 4xx 立即抛 PanelError；
+    TLS 证书校验失败不重试、立即抛 PanelError（证书问题不会在 16 秒内自愈）。
     """
     host = urlsplit(url).hostname or "default"
     sess = _get_session()
@@ -180,6 +241,9 @@ def http_get(url: str, *, timeout: float = 30, headers: Optional[Dict[str, str]]
         _log.debug("GET %s (attempt %d/%d)", url, attempt + 1, MAX_ATTEMPTS)
         try:
             resp = sess.get(url, timeout=timeout, headers=headers)
+        except requests.exceptions.SSLError as e:
+            raise PanelError(f"TLS 证书校验失败 {url}: {_fmt_exc(e)}；"
+                             f"若服务器未发中间证书，把中间证书 PEM 放进 etl/certs/ 后重试")
         except requests.RequestException as e:
             last_err = _fmt_exc(e)
         else:
@@ -197,12 +261,16 @@ def http_get(url: str, *, timeout: float = 30, headers: Optional[Dict[str, str]]
 
 
 # --------------------------------------------------------------------------- JSON
-def write_json_atomic(path: Path, obj: Any) -> None:
+def write_json_atomic(path: Path, obj: Any, compact: bool = False) -> None:
+    """先写 ``*.json.tmp`` 再 ``os.replace``；``compact=True`` 时不缩进、分隔符不带空格。"""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".json.tmp")
     with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(obj, fh, ensure_ascii=False, indent=1)
+        if compact:
+            json.dump(obj, fh, ensure_ascii=False, separators=(",", ":"))
+        else:
+            json.dump(obj, fh, ensure_ascii=False, indent=1)
         fh.write("\n")
     os.replace(tmp, path)
 
