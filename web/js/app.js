@@ -220,10 +220,9 @@
     if (!asOf && manifest && manifest.generated) asOf = String(manifest.generated).slice(0, 10);
     var n = asOf ? weekdaysBetween(asOf, new Date()) : null;
     box.className = 'freshness ' + (n === null ? 'fresh-amber' : n <= 1 ? 'fresh-green' : n <= 5 ? 'fresh-amber' : 'fresh-red');
-    box.textContent = '';
-    box.appendChild(document.createTextNode(
-      '数据更新至 ' + (asOf || '未知') + ' · ' + (n === null ? '?' : n) + ' 个交易日前（按工作日估算，未扣节假日） · 手工更新：'));
-    box.appendChild(el('code', null, 'make update'));
+    var generated = manifest && manifest.generated ? String(manifest.generated).replace('T', ' ').slice(0, 16) : null;
+    box.textContent = '数据更新至 ' + (asOf || '未知') + ' · ' + (n === null ? '?' : n) + ' 个交易日前（按工作日估算，未扣节假日）' +
+      (generated ? ' · 生成于 ' + generated : '');
 
     Object.keys(panels).forEach(function (k) {
       var e = panels[k];
@@ -240,7 +239,7 @@
       manifestPromise = fetchJSON('manifest.json').then(renderFreshness).catch(function (err) {
         var box = document.getElementById('freshness');
         box.className = 'freshness fresh-amber';
-        box.textContent = '\u26A0 无法读取 data/manifest.json（' + (err && err.message ? err.message : err) + '）· 先运行 make update';
+        box.textContent = '\u26A0 无法读取 data/manifest.json（' + (err && err.message ? err.message : err) + '）';
       });
     }
     return manifestPromise;

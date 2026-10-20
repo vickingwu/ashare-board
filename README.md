@@ -1,8 +1,27 @@
 # A股看板
 
-A 股长周期看板：Python 脚本抓公开数据算成静态 JSON，浏览器用 ECharts 渲染；`make update` 手工刷数据，`make serve` 本地打开。
+A 股长周期看板：Python 脚本抓公开数据算成静态 JSON，浏览器用 ECharts 渲染。在线版由 GitHub Actions 每个交易日自动刷数据并发布到 GitHub Pages；本地则 `make update` 刷数据、`make serve` 打开。
 
 目前（M0–M2）九个面板：**宽基指数覆盖范围**（coverage）、**宽基指数全收益净值**（widebase）、**主要宽基指数估值分位**（valuation）、**股债性价比**（erp）、**指数收益来源拆解**（decomp）、**申万一级行业年度涨跌幅**（swheat）、**行业交易热度**（indheat）、**全市场成交金额与换手率**（turnover）、**抄底数学题**（loss）。
+
+## 在线版（GitHub Pages）
+
+地址：**https://vickingwu.github.io/ashare-board/** —— 浏览器直接打开，不用 clone、不用装 Python。
+
+- 数据由 GitHub Actions 自动刷新：每个交易日（周一至周五）**北京时间 16:40** 运行 `.github/workflows/update-and-deploy.yml`，抓数 → 把变化的 `data/*.json` 提交回 `main` → 重新发布页面；全程约 6–10 分钟。
+- 手动刷新：仓库页 **Actions → update-and-deploy → Run workflow**。可选参数 `only` 填面板 id（逗号分隔，如 `erp,valuation`），只刷这几个面板；留空刷全部。
+- 本地刷新也会发布：`make update` 之后 `git push`，push 到 `main` 会触发同一个 workflow 只跑发布这一步。
+- 出错怎么看：某个面板抓数失败时页面照常发布，该面板标题旁出现黄色徽标「本次更新失败，显示 … 的上一版数据」，原因在 `data/manifest.json` 的 `error` 字段；完整日志在该次运行的 Artifacts 里（名为 `logs`，保留 14 天）。整个运行失败（装依赖、推送出错）则不发布，页面保持上一版。
+- 页面顶部「生成于 …」是 ETL 运行时间（北京时间），「数据更新至 …」是各数据源的最新日期；工作日估算的交易日差不扣节假日。
+- 本地也能生成同样的发布目录：`make site`，输出到 `_site/`。
+
+### 启用步骤（一次性）
+
+1. **仓库可见性**：GitHub Free 只给公开仓库提供 Pages；私有仓库要开 Pages 需要 GitHub Pro。要用免费方案就把仓库改公开：Settings → General → 最底部 Danger Zone → Change visibility → Public。
+2. **开启 Pages**：Settings → Pages → Build and deployment → Source 选 **GitHub Actions**。如果第一次运行 workflow 时 `configure-pages` 已经自动开好了，这一步会显示已启用，跳过即可。
+3. **跑一次**：Actions → update-and-deploy → Run workflow（分支选 `main`），等 6–10 分钟，运行页右侧 `deploy` 作业会给出页面地址，打开 https://vickingwu.github.io/ashare-board/ 。
+
+之后无需再操作，每个交易日 16:40 自动刷新。
 
 ## 安装与运行（macOS）
 
@@ -69,6 +88,8 @@ ashare-board/
 ├── data/                    # ETL 输出，入库（clone 下来即可直接看）；indheat.json 是无缩进的紧凑 JSON（约 0.9 MB）
 ├── cache/  logs/            # 运行期产物，不入库（cache/ca_bundle.pem 也在这里生成）
 ├── tests/                   # 离线单元测试（unittest），fixtures/ 是各接口的真实响应裁剪件（sws_* 为申万接口、legulegu_sw_overview_trim.html 为乐咕行业总览）
+├── scripts/build_site.py    # 把 web/ + data/ 拼成 GitHub Pages 发布目录 _site/
+├── .github/workflows/update-and-deploy.yml   # 每个交易日 16:40 抓数、提交、发布到 Pages
 ├── serve.py                 # 本地 HTTP 服务（web/ + /data/，只监听 127.0.0.1）
 ├── Makefile  requirements.txt  NOTICE.md
 ```

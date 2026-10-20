@@ -1,0 +1,117 @@
+# 每个交易日自动刷数据并发布到 GitHub Pages（https://vickingwu.github.io/ashare-board/）。
+#
+# 触发方式：
+#   schedule          UTC 08:40 周一至周五 = 北京时间 16:40（A 股 15:00 收盘，各数据源的当日数据在 16:30 前后齐全）
+#   workflow_dispatch 手动运行；可选 only 参数原样传给 etl/build_data.py --only
+#   push main         本地 make update 后 git push，也会重新发布（这种情况只跑 deploy，不再抓数）
+#
+# 两个作业放在同一次运行里是有意的：update 用 GITHUB_TOKEN 推送的数据提交不会再触发新的 workflow 运行，
+# 所以 deploy 必须紧跟在 update 之后、并重新 checkout main 才能拿到刚推送的数据。
+name: update-and-deploy
+
+on:
+  schedule:
+    - cron: '40 8 * * 1-5'   # UTC 08:40 周一至周五 = Asia/Shanghai 16:40
+  workflow_dispatch:
+    inputs:
+      only:
+        description: '只构建这些面板（逗号分隔 id，留空 = 全部），传给 etl/build_data.py --only'
+        required: false
+        default: ''
+        type: string
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ashare-board-pages
+  cancel-in-progress: false
+
+jobs:
+  update:
+    # push 事件不抓数，直接发布；手动运行只在 main 上抓数，避免从其它分支把提交推到 main
+    if: github.event_name != 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      # cache/ 里的长历史（指数日行情、国债收益率、乐咕 PE）在两次运行之间复用，每天只抓增量。
+      # key 带 run_id 所以每次都会存一份新的，restore-keys 前缀匹配取最近一次。
+      - uses: actions/cache@v4
+        with:
+          path: cache
+          key: etl-cache-${{ github.run_id }}
+          restore-keys: |
+            etl-cache-
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install -r requirements.txt
+
+      # ETL 自带面板级失败隔离：失败面板保留上一版 JSON、manifest 记 ok=false，页面显示黄色徽标。
+      # 所以这一步即使退出码非 0 也继续往下走，把能更新的部分发布出去。
+      - name: 抓数并生成 data/*.json
+        continue-on-error: true
+        env:
+          ONLY: ${{ inputs.only }}
+        run: |
+          if [ -n "$ONLY" ]; then
+            python etl/build_data.py --verbose --only "$ONLY"
+          else
+            python etl/build_data.py --verbose
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: logs
+          path: logs/
+          retention-days: 14
+
+      - name: 提交并推送数据
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          git diff --cached --quiet || git commit -m "data: $(TZ=Asia/Shanghai date +%F) 自动更新"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+  deploy:
+    needs: update
+    # update 失败（装依赖、推送出错）就不发布；update 被跳过（push 事件）照常发布
+    if: always() && (needs.update.result == 'success' || needs.update.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # 必须显式取 main 的最新提交：github.sha 是本次运行开始时的提交，不含 update 刚推送的数据
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: python scripts/build_site.py
+
+      # enablement: true —— 仓库还没开 Pages 时自动按「GitHub Actions」方式开启；token 权限不够时这一步会报错，按 README「启用步骤」手工开启即可
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

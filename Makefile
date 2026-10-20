@@ -1,5 +1,5 @@
 # A股看板 —— macOS 常用命令（需要 python3 ≥ 3.9；Windows 请直接用 .venv\Scripts\python.exe 运行同名脚本）
-.PHONY: setup update update-only test serve clean-cache clean-cache-quotes clean-cache-sws
+.PHONY: setup update update-only test serve site clean-cache clean-cache-quotes clean-cache-sws
 
 PY := .venv/bin/python
 
@@ -18,6 +18,10 @@ test:
 
 serve:
 	python3 serve.py 8000
+
+# 生成 GitHub Pages 发布目录 _site/（web/ + data/），与 Actions 里 deploy 作业做的事相同
+site:
+	$(PY) scripts/build_site.py
 
 # 清掉全部缓存：下次 make update 会重新下载长历史（申万行业全史约 13 分钟 + 中债登按年抓约 4 分钟，整体约 20 分钟）
 clean-cache:

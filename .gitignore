@@ -9,6 +9,11 @@ logs/*
 *.log
 *.tmp
 *.json.tmp
+# GitHub Pages 发布目录（scripts/build_site.py 生成）
+_site/
+
+# git worktree 挂载点
+.worktrees/
 
 # 本仓库内的 git worktree（如 pages 分支的检出目录）
 .worktrees/
