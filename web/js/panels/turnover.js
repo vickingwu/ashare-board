@@ -31,7 +31,7 @@
     return W;
   }
 
-  // 短窗口（≤ 3 年）按月标刻度：每月第一个交易日显示 YYYY-MM，每 step 个月标一个
+  // 短窗口（≤ 3 年）按月标刻度：刻度落在该月的第一个交易日，文本 YYYY-MM，每 step 个月标一个
   function monthLabelFormatter(dates, step) {
     var m0 = dates.length ? +dates[0].slice(0, 4) * 12 + +dates[0].slice(5, 7) : 0;
     return function (value, idx) {

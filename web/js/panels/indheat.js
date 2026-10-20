@@ -174,7 +174,7 @@
 
     var crumbHost = C.el('div');
     body.appendChild(crumbHost);
-    body.appendChild(C.el('p', 'heat-legend', '颜色越深越热：RPS 0 = 同级最弱，100 = 同级最强；MA20 站上率为近 250 日收盘高于 20 日均线的天数占比。一级行业的格子可点击，展开它的二级行业。'));
+    body.appendChild(C.el('p', 'heat-legend', '颜色越深越热：RPS 0 = 同级最弱，100 = 同级最强；MA20 站上率 = 近 250 日里收盘站在自身 20 日均线之上的比例。一级行业的格子可点击，展开它的二级行业。'));
 
     var chartEl = C.el('div', 'chart chart-heat-ind');
     body.appendChild(chartEl);
