@@ -1,7 +1,8 @@
 /*
  * 面板 valuation —— 主要宽基指数估值分位。
- *   每个指数一行：绿→黄→红的区间条表示自身月末 PE 的 最低→最高，白圈是当前 PE 的位置；
- *   条下标注 PE、全历史 / 近10年 / 近5年 分位；下方是可排序的明细表。
+ *   每个指数一行：绿→黄→红的区间条按「分位」等距铺开（左端 = 分位 0 = 历史最低 PE，右端 = 分位 100 = 最高），
+ *   白圈落在当前 PE 的全历史分位处，竖线是分位 50（中位数）——所以圈的位置和条下文字里的百分数完全一致；
+ *   条两端标最低 / 最高 PE 的数值；下方是可排序的明细表。
  * 数据：data/valuation.json → data.indexes[]{code,name,source,peNow,peDate,sampleStart,nMonths,pctAll,pct10y,pct5y,min,max,median,shortSample,monthly}
  */
 (function () {
@@ -38,19 +39,20 @@
       var barH = Math.min(14, Math.max(8, bandH * 0.26));
       var cy = p0[1] - bandH * 0.16;
       var x0 = p0[0], x1 = p1[0], w = x1 - x0;
-      var span = r.max - r.min;
-      var pos = span > 0 ? Math.max(0, Math.min(1, (r.peNow - r.min) / span)) : 0.5;
-      var med = span > 0 ? (r.median - r.min) / span : 0.5;
+      // 分位空间：条的 0–100 就是分位 0–100，圈放在全历史分位处，中位数固定在 50
+      var pos = (r.pctAll === null || r.pctAll === undefined) ? 0.5 : Math.max(0, Math.min(1, r.pctAll / 100));
+      var med = 0.5;
       var cx = x0 + w * pos;
       var fontSize = narrow ? 10.5 : 11.5;
+      var lo = (narrow ? '' : '最低 ') + fmt.num(r.min, 1), hi = (narrow ? '' : '最高 ') + fmt.num(r.max, 1);
       return {
         type: 'group',
         children: [
           { type: 'rect', shape: { x: x0, y: cy - barH / 2, width: w, height: barH, r: barH / 2 }, style: { fill: gradient } },
           { type: 'rect', shape: { x: x0 + w * med - 1, y: cy - barH / 2 - 3, width: 2, height: barH + 6 }, style: { fill: 'rgba(31,35,40,0.55)' } },
           { type: 'circle', shape: { cx: cx, cy: cy, r: barH * 0.5 + 3 }, style: { fill: '#fff', stroke: palette.fg, lineWidth: 2, shadowBlur: 3, shadowColor: 'rgba(0,0,0,0.25)' } },
-          { type: 'text', style: { x: x0 - 6, y: cy, text: fmt.num(r.min, 1), textAlign: 'right', textVerticalAlign: 'middle', fontSize: 10.5, fill: palette.muted } },
-          { type: 'text', style: { x: x1 + 6, y: cy, text: fmt.num(r.max, 1), textAlign: 'left', textVerticalAlign: 'middle', fontSize: 10.5, fill: palette.muted } },
+          { type: 'text', style: { x: x0 - 6, y: cy, text: lo, textAlign: 'right', textVerticalAlign: 'middle', fontSize: 10.5, fill: palette.muted } },
+          { type: 'text', style: { x: x1 + 6, y: cy, text: hi, textAlign: 'left', textVerticalAlign: 'middle', fontSize: 10.5, fill: palette.muted } },
           { type: 'text', style: { x: x0, y: cy + barH / 2 + 5, text: labelFor(r, narrow, fmt), textAlign: 'left', textVerticalAlign: 'top', fontSize: fontSize, fill: palette.fg } }
         ]
       };
@@ -115,9 +117,9 @@
     var rows = d.indexes.slice();
 
     var legend = C.el('div', 'val-legend');
-    legend.appendChild(document.createTextNode('最低'));
+    legend.appendChild(document.createTextNode('最低 PE（分位 0）'));
     legend.appendChild(C.el('span', 'grad'));
-    legend.appendChild(document.createTextNode('最高 · 白圈 = 当前 PE · 竖线 = 中位数 · 条两端数字 = 历史最低 / 最高 PE'));
+    legend.appendChild(document.createTextNode('最高 PE（分位 100）：条按分位等距 · 白圈 = 当前 PE 的全历史分位 · 竖线 = 中位数（分位 50）'));
     body.appendChild(legend);
 
     var chartEl = C.el('div', 'chart chart-auto');
@@ -147,11 +149,11 @@
   window.AshareBoard.registerPanel({
     id: 'valuation',
     title: '主要宽基指数估值分位',
-    subtitle: '滚动市盈率（整体法）当前值在自身月末历史中的位置 · 绿低红高',
+    subtitle: '滚动市盈率（整体法）当前值在自身月末历史中的分位 · 条按分位 0–100 等距 · 绿低红高',
     dataFile: 'valuation.json',
     bodyMinHeight: 1040,
     notes: [
-      '区间条按每个指数自己的历史最低到最高拉满，所以不同行之间的颜色位置不能互相比较，只表示「相对自己的历史贵不贵」。',
+      '区间条的横轴是分位而不是 PE 数值：左端是该指数自己历史上的最低 PE（分位 0），右端是最高（分位 100），竖线永远在分位 50；白圈的位置就是条下文字里的「全历史」百分数。不同行之间比较的是「相对自己的历史贵不贵」，不是 PE 的绝对高低。',
       '分位数字是含等号的占比：45% 表示历史上 45% 的月末 PE 不高于现在。'
     ],
     render: render

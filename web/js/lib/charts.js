@@ -1,6 +1,7 @@
 /*
  * A股看板 —— 面板共用的图表与表格小工具（window.AshareCharts）。
- * 在 app.js 之后、各面板脚本之前加载。面板不要各自重写这里已有的归一、年化、渐变色、月末判断与坐标轴配置。
+ * 在 app.js 之后、各面板脚本之前加载。面板不要各自重写这里已有的归一、年化、渐变色、月末判断与坐标轴配置，
+ * 也不要重写 N 日涨幅 / 滚动均值 / 横截面排名分位 / 热力图骨架 / 工具条小件（下拉、按钮组、面包屑）。
  */
 (function () {
   'use strict';
@@ -95,6 +96,87 @@
   function fmtSignedPct(x, d) {
     if (x === null || x === undefined || isNaN(x)) return '–';
     return fmtPp(x, d) + '%';
+  }
+
+  // ---------------------------------------------------------------- 序列计算（热力图 / 换手率面板共用；空值一律 null）
+  function isNum(v) { return v !== null && v !== undefined && typeof v === 'number' && !isNaN(v); }
+
+  // n 步涨跌幅（%）：values[i] / values[i-n] − 1；下标 < n 或两端任一为空 → null
+  function pctChangeN(values, n) {
+    var out = new Array(values.length);
+    for (var i = 0; i < values.length; i++) {
+      var a = i >= n ? values[i - n] : null, b = values[i];
+      out[i] = (isNum(a) && isNum(b) && a > 0) ? (b / a - 1) * 100 : null;
+    }
+    return out;
+  }
+
+  // 尾随 n 个值的简单均值；窗口内任一为空 → null
+  function rollingMean(values, n) {
+    var out = new Array(values.length);
+    for (var i = 0; i < values.length; i++) {
+      if (i < n - 1) { out[i] = null; continue; }
+      var sum = 0, ok = true;
+      for (var j = i - n + 1; j <= i; j++) {
+        if (!isNum(values[j])) { ok = false; break; }
+        sum += values[j];
+      }
+      out[i] = ok ? sum / n : null;
+    }
+    return out;
+  }
+
+  // 尾随 n 个布尔值里 true 的占比（%）；窗口内有 null/undefined → null
+  function rollingShare(flags, n) {
+    var out = new Array(flags.length);
+    for (var i = 0; i < flags.length; i++) {
+      if (i < n - 1) { out[i] = null; continue; }
+      var cnt = 0, ok = true;
+      for (var j = i - n + 1; j <= i; j++) {
+        var f = flags[j];
+        if (f !== true && f !== false) { ok = false; break; }
+        if (f) cnt++;
+      }
+      out[i] = ok ? cnt / n * 100 : null;
+    }
+    return out;
+  }
+
+  // 同一天的横截面排名分位：100 × #(v_j < v_i) / (n − 1)，n = 非空个数（n ≥ 2，否则全为 null）；1 位小数
+  function rankPct(vals) {
+    var sorted = [];
+    for (var i = 0; i < vals.length; i++) if (isNum(vals[i])) sorted.push(vals[i]);
+    var n = sorted.length;
+    if (n < 2) return vals.map(function () { return null; });
+    sorted.sort(function (a, b) { return a - b; });
+    return vals.map(function (v) {
+      if (!isNum(v)) return null;
+      var lo = 0, hi = n;                 // 第一个 ≥ v 的位置 = 严格小于 v 的个数
+      while (lo < hi) { var mid = (lo + hi) >> 1; if (sorted[mid] < v) lo = mid + 1; else hi = mid; }
+      return Math.round(lo / (n - 1) * 1000) / 10;
+    });
+  }
+
+  // x 在 arr 里的含等号分位（0–100）：#(v ≤ x) / n；空值跳过；无样本或 x 为空 → null
+  function percentileRank(arr, x) {
+    if (!isNum(x)) return null;
+    var n = 0, le = 0;
+    for (var i = 0; i < arr.length; i++) {
+      if (!isNum(arr[i])) continue;
+      n++;
+      if (arr[i] <= x) le++;
+    }
+    return n ? le / n * 100 : null;
+  }
+
+  // 均值与样本标准差（空值跳过；n < 2 时 std = 0，n = 0 时 mean = null）
+  function meanStd(arr) {
+    var n = 0, sum = 0;
+    for (var i = 0; i < arr.length; i++) if (isNum(arr[i])) { n++; sum += arr[i]; }
+    if (!n) return { mean: null, std: 0 };
+    var mean = sum / n, ss = 0;
+    for (var j = 0; j < arr.length; j++) if (isNum(arr[j])) ss += (arr[j] - mean) * (arr[j] - mean);
+    return { mean: mean, std: n > 1 ? Math.sqrt(ss / (n - 1)) : 0 };
   }
 
   // ---------------------------------------------------------------- 颜色
@@ -213,6 +295,33 @@
     };
   }
 
+  // 热力图配置骨架：类目轴 × 类目轴，纵轴从上往下，不画网格线与刻度；面板只需补 series / visualMap / 标签
+  function heatmapBase(opts) {
+    opts = opts || {};
+    var narrow = !!opts.narrow;
+    return {
+      animation: false,
+      tooltip: { trigger: 'item', confine: true, textStyle: { fontSize: 12 } },
+      grid: { left: narrow ? 84 : 120, right: narrow ? 12 : 24, top: 16, bottom: narrow ? 60 : 36 },
+      xAxis: {
+        type: 'category', data: opts.xCats || [],
+        splitArea: { show: false }, axisTick: { show: false }, axisLine: { show: false },
+        axisLabel: { color: palette.muted, fontSize: 10.5, rotate: 0, interval: 0 }
+      },
+      yAxis: {
+        type: 'category', data: opts.yCats || [], inverse: true,
+        splitArea: { show: false }, axisTick: { show: false }, axisLine: { show: false },
+        axisLabel: { color: palette.fg, fontSize: narrow ? 11 : 12 }
+      },
+      series: []
+    };
+  }
+
+  // 热力图格内文字
+  function heatCellLabel(show, formatter) {
+    return { show: !!show, fontSize: 10, color: palette.fg, formatter: formatter };
+  }
+
   // ---------------------------------------------------------------- DOM 小件
   function el(tag, cls, text) {
     var e = document.createElement(tag);
@@ -221,11 +330,16 @@
     return e;
   }
 
-  // 时间窗按钮组；onPick(index) 在点击时调用
-  function rangeButtons(container, labels, activeIdx, onPick) {
-    var box = el('div', 'panel-tools');
+  // 按钮组；onPick(index) 在点击时调用。
+  // container 本身是 .panel-tools 时，按钮装进一个 span.tools-group 追加到该工具条里（可带 opts.label 前缀），返回这个 span；
+  // 否则新建一个 .panel-tools 挂到 container 下并返回它（旧行为）。
+  function rangeButtons(container, labels, activeIdx, onPick, opts) {
+    opts = opts || {};
+    var inline = !!(container.classList && container.classList.contains('panel-tools'));
+    var box = el(inline ? 'span' : 'div', inline ? 'tools-group' : 'panel-tools');
     box.setAttribute('role', 'group');
-    box.setAttribute('aria-label', '时间窗');
+    box.setAttribute('aria-label', opts.label || '时间窗');
+    if (opts.label) box.appendChild(el('span', 'tools-label', opts.label));
     var btns = labels.map(function (label, i) {
       var b = el('button', 'range-btn' + (i === activeIdx ? ' active' : ''), label);
       b.type = 'button';
@@ -240,6 +354,46 @@
       box.appendChild(b);
       return b;
     });
+    container.appendChild(box);
+    return box;
+  }
+
+  // 下拉选择：「标签 + <select>」追加到 container（通常是 .panel-tools），返回 select 元素
+  function selectControl(container, spec) {
+    spec = spec || {};
+    var wrap = el('span', 'tools-group');
+    if (spec.label) wrap.appendChild(el('span', 'tools-label', spec.label));
+    var sel = el('select', 'inline-select');
+    if (spec.id) sel.id = spec.id;
+    if (spec.name) sel.name = spec.name;
+    sel.setAttribute('aria-label', spec.label || spec.name || spec.id || '选择');
+    (spec.options || []).forEach(function (o) {
+      var opt = el('option', null, o.text);
+      opt.value = String(o.value);
+      if (spec.value !== undefined && String(o.value) === String(spec.value)) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    if (typeof spec.onChange === 'function') {
+      sel.addEventListener('change', function () { spec.onChange(sel.value, sel); });
+    }
+    wrap.appendChild(sel);
+    container.appendChild(wrap);
+    return sel;
+  }
+
+  // 面包屑：items 用「›」连接（最后一项加粗）；给了 onBack 就在末尾放一个「返回一级」按钮。返回 .crumbs 元素
+  function crumbs(container, items, onBack) {
+    var box = el('div', 'crumbs');
+    items.forEach(function (t, i) {
+      if (i) box.appendChild(el('span', 'sep', '\u203A'));
+      box.appendChild(el(i === items.length - 1 ? 'strong' : 'span', null, t));
+    });
+    if (typeof onBack === 'function') {
+      var b = el('button', 'range-btn btn-back', '返回一级');
+      b.type = 'button';
+      b.addEventListener('click', onBack);
+      box.appendChild(b);
+    }
     container.appendChild(box);
     return box;
   }
@@ -339,6 +493,14 @@
     fmtMult: fmtMult,
     fmtPp: fmtPp,
     fmtSignedPct: fmtSignedPct,
+    pctChangeN: pctChangeN,
+    rollingMean: rollingMean,
+    rollingShare: rollingShare,
+    rankPct: rankPct,
+    percentileRank: percentileRank,
+    meanStd: meanStd,
+    heatmapBase: heatmapBase,
+    heatCellLabel: heatCellLabel,
     lerpColor: lerpColor,
     gradientGreenRed: gradientGreenRed,
     withAlpha: withAlpha,
@@ -349,6 +511,8 @@
     sigmaBands: sigmaBands,
     el: el,
     rangeButtons: rangeButtons,
+    selectControl: selectControl,
+    crumbs: crumbs,
     makeTable: makeTable,
     colorCell: colorCell
   };

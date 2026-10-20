@@ -27,6 +27,12 @@
     dividend: '#2E9E6B',   // 收益拆解：股息
     earnings: '#5A6FD8',   // 收益拆解：盈利
     valuation: '#E8903A',  // 收益拆解：估值
+    amount: '#AEB9CC',     // 成交额柱
+    amountMa: '#3B5BDB',   // 成交额 20 日均线
+    turnover: '#B7410E',   // 换手率折线
+    heatLow: '#F2F6FC',    // 单色热力图：最冷
+    heatHigh: '#1F5FBF',   // 单色热力图：最热
+    neutral: '#FFFFFF',    // 红绿双向色阶的中点
     up: '#D64541',
     down: '#1E9E5A',
     muted: '#6B7280',

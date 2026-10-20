@@ -227,6 +227,16 @@ table.data-table td.dim { color: #9CA3AF; }
   color: var(--fg);
 }
 .tools-label { font-size: 13px; color: var(--muted); margin-right: 2px; }
+.tools-group { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-right: 10px; }
+.tools-group[hidden] { display: none; }
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+.crumbs strong { color: var(--fg); }
+.crumbs .sep { color: #9CA3AF; }
+.btn-back { margin-left: 4px; }
+.heat-legend { font-size: 12.5px; color: var(--muted); margin: 0 0 6px; }
+.chart-heat { height: 820px; }
+.chart-heat-ind { height: 780px; }
+.chart-turnover { height: 640px; }
 .readout { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 6px 0 10px; font-size: 14px; color: var(--muted); }
 .readout strong { color: var(--fg); font-size: 16px; font-variant-numeric: tabular-nums; font-weight: 600; }
 .chart-tall { height: 520px; }
@@ -264,6 +274,10 @@ table.data-table td.dim { color: #9CA3AF; }
   table.data-table th, table.data-table td { padding: 4px 6px; }
   .chart-tall { height: 380px; }
   .chart-mid { height: 340px; }
+  .chart-heat { height: 620px; }
+  .chart-heat-ind { height: 600px; }
+  .chart-turnover { height: 520px; }
+  .tools-group { margin-right: 6px; }
   .range-btn { padding: 4px 8px; font-size: 12px; }
   .readout { font-size: 13px; gap: 2px 12px; }
   .readout strong { font-size: 14px; }
