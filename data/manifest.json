@@ -1,18 +1,18 @@
 {
- "generated": "2026-10-20T16:49:01+08:00",
+ "generated": "2026-10-20T21:49:43+08:00",
  "panels": {
   "coverage": {
    "ok": true,
    "asOf": "2026-10-20",
-   "generated": "2026-10-20T16:34:26+08:00",
+   "generated": "2026-10-20T21:49:42+08:00",
    "error": null,
-   "durationSec": 35.1,
+   "durationSec": 0.1,
    "static": false
   },
   "loss": {
    "ok": true,
    "asOf": "2026-10-20",
-   "generated": "2026-10-20T16:48:31+08:00",
+   "generated": "2026-10-20T21:49:42+08:00",
    "error": null,
    "durationSec": 0.0,
    "static": true
@@ -20,31 +20,31 @@
   "decomp": {
    "ok": true,
    "asOf": "2026-09-30",
-   "generated": "2026-10-20T16:34:41+08:00",
+   "generated": "2026-10-20T21:49:42+08:00",
    "error": null,
-   "durationSec": 14.4,
+   "durationSec": 0.1,
    "static": false
   },
   "erp": {
    "ok": true,
    "asOf": "2026-10-19",
-   "generated": "2026-10-20T16:39:09+08:00",
+   "generated": "2026-10-20T21:49:42+08:00",
    "error": null,
-   "durationSec": 267.8,
+   "durationSec": 0.0,
    "static": false
   },
   "valuation": {
    "ok": true,
    "asOf": "2026-10-19",
-   "generated": "2026-10-20T16:49:01+08:00",
+   "generated": "2026-10-20T21:49:42+08:00",
    "error": null,
-   "durationSec": 3.6,
+   "durationSec": 0.0,
    "static": false
   },
   "widebase": {
    "ok": true,
    "asOf": "2026-10-19",
-   "generated": "2026-10-20T16:49:01+08:00",
+   "generated": "2026-10-20T21:49:43+08:00",
    "error": null,
    "durationSec": 0.1,
    "static": false
@@ -52,25 +52,25 @@
   "indheat": {
    "ok": true,
    "asOf": "2026-10-19",
-   "generated": "2026-10-20T16:48:30+08:00",
+   "generated": "2026-10-20T21:49:42+08:00",
    "error": null,
-   "durationSec": 562.0,
+   "durationSec": 0.4,
    "static": false
   },
   "swheat": {
    "ok": true,
    "asOf": "2026-10-19",
-   "generated": "2026-10-20T16:48:39+08:00",
+   "generated": "2026-10-20T21:49:42+08:00",
    "error": null,
-   "durationSec": 8.9,
+   "durationSec": 0.4,
    "static": false
   },
   "turnover": {
    "ok": true,
    "asOf": "2026-10-19",
-   "generated": "2026-10-20T16:48:57+08:00",
+   "generated": "2026-10-20T21:49:42+08:00",
    "error": null,
-   "durationSec": 17.7,
+   "durationSec": 0.1,
    "static": false
   }
  }
