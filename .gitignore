@@ -10,6 +10,9 @@ logs/*
 *.tmp
 *.json.tmp
 
+# 本仓库内的 git worktree（如 pages 分支的检出目录）
+.worktrees/
+
 # Python
 __pycache__/
 *.pyc
