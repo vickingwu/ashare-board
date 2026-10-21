@@ -1,18 +1,18 @@
 {
- "generated": "2026-10-21T10:22:10+08:00",
+ "generated": "2026-10-21T10:25:21+08:00",
  "panels": {
   "coverage": {
    "ok": true,
-   "asOf": "2026-10-20",
-   "generated": "2026-10-20T21:49:42+08:00",
+   "asOf": "2026-10-21",
+   "generated": "2026-10-21T10:24:50+08:00",
    "error": null,
-   "durationSec": 0.1,
+   "durationSec": 35.2,
    "static": false
   },
   "loss": {
    "ok": true,
-   "asOf": "2026-10-20",
-   "generated": "2026-10-20T21:49:42+08:00",
+   "asOf": "2026-10-21",
+   "generated": "2026-10-21T10:25:15+08:00",
    "error": null,
    "durationSec": 0.0,
    "static": true
@@ -20,57 +20,57 @@
   "decomp": {
    "ok": true,
    "asOf": "2026-09-30",
-   "generated": "2026-10-21T10:22:10+08:00",
+   "generated": "2026-10-21T10:24:58+08:00",
    "error": null,
-   "durationSec": 0.1,
+   "durationSec": 8.3,
    "static": false
   },
   "erp": {
    "ok": true,
    "asOf": "2026-10-20",
-   "generated": "2026-10-21T10:22:10+08:00",
+   "generated": "2026-10-21T10:25:11+08:00",
    "error": null,
-   "durationSec": 0.0,
+   "durationSec": 13.3,
    "static": false
   },
   "valuation": {
    "ok": true,
    "asOf": "2026-10-20",
-   "generated": "2026-10-21T10:22:10+08:00",
+   "generated": "2026-10-21T10:25:20+08:00",
    "error": null,
-   "durationSec": 0.0,
+   "durationSec": 1.9,
    "static": false
   },
   "widebase": {
-   "ok": true,
+   "ok": false,
    "asOf": "2026-10-20",
    "generated": "2026-10-21T10:22:10+08:00",
-   "error": null,
-   "durationSec": 0.1,
+   "error": "PanelError: HTTP 403 https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000510&startDate=20261019&endDate=20261021",
+   "durationSec": 0.6,
    "static": false
   },
   "indheat": {
    "ok": true,
-   "asOf": "2026-10-19",
-   "generated": "2026-10-20T21:49:42+08:00",
+   "asOf": "2026-10-20",
+   "generated": "2026-10-21T10:25:15+08:00",
    "error": null,
-   "durationSec": 0.4,
+   "durationSec": 4.3,
    "static": false
   },
   "swheat": {
    "ok": true,
-   "asOf": "2026-10-19",
-   "generated": "2026-10-20T21:49:42+08:00",
+   "asOf": "2026-10-20",
+   "generated": "2026-10-21T10:25:16+08:00",
    "error": null,
-   "durationSec": 0.4,
+   "durationSec": 0.8,
    "static": false
   },
   "turnover": {
    "ok": true,
-   "asOf": "2026-10-19",
-   "generated": "2026-10-20T21:49:42+08:00",
+   "asOf": "2026-10-20",
+   "generated": "2026-10-21T10:25:18+08:00",
    "error": null,
-   "durationSec": 0.1,
+   "durationSec": 2.0,
    "static": false
   }
  }
