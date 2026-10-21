@@ -267,6 +267,28 @@ class FetchTest(unittest.TestCase):
             self.assertEqual(sws.get_index_list(sws.LEVEL1), [("801010", "农林牧渔")])
 
 
+class SeriesStartTest(unittest.TestCase):
+    DATES = ["2014-02-21", "2016-12-30", "2017-01-20", "2021-12-10", "2021-12-13", "2022-01-04"]
+    CLOSE = [997.49, 1450.14, 1511.21, 1500.0, 2427.14, 2500.0]
+
+    def test_cut_801950_drops_rows_before_2021_12_13(self):
+        self.assertEqual(sws.SERIES_START, {"801950": "2021-12-13"})
+        d, v = sws.cut_series_start("801950", self.DATES, self.CLOSE)
+        self.assertEqual(d, ["2021-12-13", "2022-01-04"])
+        self.assertEqual(v, [2427.14, 2500.0])
+        d2, v2 = sws.cut_series_start("801950", ["2021-12-13"], [1.0])          # 起点当天保留（≥）
+        self.assertEqual((d2, v2), (["2021-12-13"], [1.0]))
+        self.assertEqual(sws.cut_series_start("801950", ["2020-01-02"], [1.0]), ([], []))
+
+    def test_other_codes_untouched_and_copied(self):
+        d, v = sws.cut_series_start("801010", self.DATES, self.CLOSE)
+        self.assertEqual(d, self.DATES)
+        self.assertEqual(v, self.CLOSE)
+        self.assertIsNot(d, self.DATES)                                        # 返回新列表，不改调用方的数据
+        self.assertIsNot(v, self.CLOSE)
+        self.assertEqual(sws.cut_series_start("801010", [], []), ([], []))
+
+
 class AIndexTest(unittest.TestCase):
     def test_get_trend_drops_zero_amount_and_today_before_close(self):
         body = json.loads(_fx("sws_trend_801003_trim.json"))

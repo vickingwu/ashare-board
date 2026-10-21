@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Optional
 from etl import compute
 from etl.common import PanelError
 from etl.sources import sws
+from etl.sources.sws import SERIES_START, cut_series_start   # SERIES_START 同时保留为本模块属性（build 的说明文字与测试沿用）
 
 log = logging.getLogger("etl.swheat")
 
@@ -49,11 +50,8 @@ BASE_1999_CODES = frozenset({
     "801010", "801030", "801040", "801050", "801080", "801110", "801120", "801130",
     "801140", "801150", "801160", "801170", "801180", "801200", "801210", "801230",
 })
-# 按代码截掉起点之前的行：接口在这个日期之前用同一代码返回的是另一只指数。
-# 801950 煤炭：2014-02-21 → 2017-01-20 的行流通市值只有 231.56 → 417.51 亿元、成交额占比 0.26 → 0.11 %，
-# 2017-01-23 → 2021-12-10 无记录，2021-12-13 重新开始时流通市值 3416.68 亿元（同日 801960 石油石化也从这里起算）。
-# 前一段不是煤炭一级行业，不能标成煤炭的 2015 / 2016 年涨跌幅。
-SERIES_START: Dict[str, str] = {"801950": "2021-12-13"}
+# 按代码截掉起点之前的行（801950 煤炭 2021-12-13 之前是另一只指数）：表与截取函数在 sws.SERIES_START /
+# sws.cut_series_start，与 trend 面板共用；这里保留 SERIES_START 这个模块属性。
 
 
 def _r(x: Optional[float], nd: int = 2) -> Optional[float]:
@@ -64,10 +62,7 @@ def _one_industry(h: Dict[str, Any], years: List[int], as_of_year: int) -> Dict[
     """单个行业：年度涨跌幅、起始年、YTD、年化（排名在外层统一算）。"""
     name = h.get("name") or h["code"]
     dates, close = compute.drop_none(h["dates"], h["close"])
-    start = SERIES_START.get(h["code"])
-    if start:
-        kept = [(d, v) for d, v in zip(dates, close) if d >= start]
-        dates, close = [d for d, _ in kept], [v for _, v in kept]
+    dates, close = cut_series_start(h["code"], dates, close)
     if not dates:
         raise PanelError(f"{name}（{h['code']}）没有任何收盘数据")
     compute.assert_ascending(dates, f"{name} 日期")

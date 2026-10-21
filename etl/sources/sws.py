@@ -21,6 +21,8 @@
 * 申万Ａ指 = 沪深两市全部 A 股（不含北交所、B 股）；其 ``negotiablessharesum1``（流通市值）在
   2011-01-04 → 2012-04-16 共 307 日为 null，是申万自身的数据空档，**不得填补**；
 * 申万 ``turnoverrate`` 不是 成交额/流通市值，换手率由面板自算，此字段只作参考；
+* 同一代码可能被申万复用：煤炭（801950）在分析接口里 2021-12-13 之前的行属于另一只小指数（见 ``SERIES_START``），
+  用到行业收盘序列的面板（swheat、trend）一律先经 ``cut_series_start`` 截掉起点之前的行；
 * 申万 T+1 发布且偶有缺日（2026-10-15 缺失），因此增量窗口取「最后缓存日 − 30 天」让迟到的日期得以补入，
   且不与中证交易日历对账；
 * 服务器只发叶子证书，依赖 ``etl/certs/`` 里的中间证书（见 common.ca_bundle_path）。
@@ -77,6 +79,21 @@ A_INDEX_FILE = "analysis_801003.json"
 
 FIELDS = ("close", "amtShare", "mv", "turnoverSw")
 TrendRow = Tuple[str, float, float, float]   # (date, close, amount 亿元, volume 亿股)
+
+# 按代码截掉起点之前的行：接口在这个日期之前用同一代码返回的是另一只指数。
+# 801950 煤炭：2014-02-21 → 2017-01-20 的行流通市值只有 231.56 → 417.51 亿元、成交额占比 0.26 → 0.11 %，
+# 2017-01-23 → 2021-12-10 无记录，2021-12-13 重新开始时流通市值 3416.68 亿元（同日 801960 石油石化也从这里起算）。
+# 前一段不是煤炭一级行业，不能标成煤炭的 2015 / 2016 年涨跌幅，也不能进煤炭的 MACD 序列。
+SERIES_START: Dict[str, str] = {"801950": "2021-12-13"}
+
+
+def cut_series_start(code: str, dates: List[str], values: list) -> Tuple[List[str], list]:
+    """丢掉 ``SERIES_START[code]`` 之前的行 → (dates, values)；代码不在表里时原样返回两个新列表。纯函数。"""
+    start = SERIES_START.get(code)
+    if not start:
+        return list(dates), list(values)
+    kept = [(d, v) for d, v in zip(dates, values) if d >= start]
+    return [d for d, _ in kept], [v for _, v in kept]
 
 
 # --------------------------------------------------------------------------- 解析（纯函数）
