@@ -1,7 +1,8 @@
 /*
  * A股看板 —— 面板共用的图表与表格小工具（window.AshareCharts）。
  * 在 app.js 之后、各面板脚本之前加载。面板不要各自重写这里已有的归一、年化、渐变色、月末判断与坐标轴配置，
- * 也不要重写 N 日涨幅 / 滚动均值 / 横截面排名分位 / 热力图骨架 / 工具条小件（下拉、按钮组、面包屑）。
+ * 也不要重写 N 日涨幅 / 滚动均值 / 横截面排名分位 / 热力图骨架 / 工具条小件（下拉、按钮组、面包屑），
+ * 以及时间轴片段（timeAxis）、区间底色（bandAreas）、日期-数值行（toTimeRows）与按月回推（monthsBack）。
  */
 (function () {
   'use strict';
@@ -45,6 +46,17 @@
     var y = d.getUTCFullYear() - years, m = d.getUTCMonth(), day = d.getUTCDate();
     var t = new Date(Date.UTC(y, m, day));
     if (t.getUTCMonth() !== m) t = new Date(Date.UTC(y, m, 28));
+    return t.toISOString().slice(0, 10);
+  }
+
+  // endDate 往前推 months 个月（同日；该月没有这一天时退到月末，如 03-31 → 02-28）
+  function monthsBack(endDate, months) {
+    var d = parseDate(endDate);
+    if (!d) return endDate;
+    var total = d.getUTCFullYear() * 12 + d.getUTCMonth() - months;
+    var y = Math.floor(total / 12), m = total - y * 12, day = d.getUTCDate();
+    var t = new Date(Date.UTC(y, m, day));
+    if (t.getUTCMonth() !== m) t = new Date(Date.UTC(y, m + 1, 0));
     return t.toISOString().slice(0, 10);
   }
 
@@ -169,6 +181,18 @@
     return n ? le / n * 100 : null;
   }
 
+  // 日期 + 数值 → 时间轴用的 [[dateStr, v], …]；空值默认保留为 [d, null]（折线断开），opts.dropNull 时跳过
+  function toTimeRows(dates, values, opts) {
+    opts = opts || {};
+    var out = [];
+    for (var i = 0; i < dates.length; i++) {
+      var v = values[i], ok = isNum(v);
+      if (!ok && opts.dropNull) continue;
+      out.push([dates[i], ok ? v : null]);
+    }
+    return out;
+  }
+
   // 均值与样本标准差（空值跳过；n < 2 时 std = 0，n = 0 时 mean = null）
   function meanStd(arr) {
     var n = 0, sum = 0;
@@ -227,6 +251,36 @@
         color: palette.muted, fontSize: 11,
         formatter: function (v) { return v >= 100 ? fmt.num(v, 0) : fmt.num(v, v >= 10 ? 0 : 1); }
       }
+    };
+  }
+
+  // 时间轴片段（日期不等距的日/月混排序列用）：opts = {gridIndex, min, max, labels(false 隐藏刻度文字), formatter}
+  // 刻度文字按层级用数字月份（年 YYYY、月 YYYY-MM、日 MM-DD），不出现英文月名；min/max 未给时为 null（随数据）
+  function timeAxis(opts) {
+    opts = opts || {};
+    return {
+      type: 'time',
+      gridIndex: opts.gridIndex || 0,
+      boundaryGap: false,
+      axisLine: { lineStyle: { color: '#D1D5DB' } },
+      axisTick: { show: false },
+      axisLabel: {
+        show: opts.labels !== false, color: palette.muted, fontSize: 11, hideOverlap: true,
+        formatter: opts.formatter || { year: '{yyyy}', month: '{yyyy}-{MM}', day: '{MM}-{dd}' }
+      },
+      splitLine: { show: false },
+      min: opts.min === undefined ? null : opts.min,
+      max: opts.max === undefined ? null : opts.max
+    };
+  }
+
+  // 横向区间底色：bands = [{lo, hi}]，colors 逐段对应，opacity 默认 0.12 → series.markArea
+  function bandAreas(bands, colors, opacity) {
+    return {
+      silent: true,
+      data: bands.map(function (b, i) {
+        return [{ yAxis: b.lo, itemStyle: { color: withAlpha(colors[i % colors.length], opacity || 0.12) } }, { yAxis: b.hi }];
+      })
     };
   }
 
@@ -487,6 +541,7 @@
     cagr: cagr,
     firstIndexOnOrAfter: firstIndexOnOrAfter,
     windowStartDate: windowStartDate,
+    monthsBack: monthsBack,
     normalizeFrom: normalizeFrom,
     isLastWeekdayOfMonth: isLastWeekdayOfMonth,
     monthEndIndexes: monthEndIndexes,
@@ -498,6 +553,7 @@
     rollingShare: rollingShare,
     rankPct: rankPct,
     percentileRank: percentileRank,
+    toTimeRows: toTimeRows,
     meanStd: meanStd,
     heatmapBase: heatmapBase,
     heatCellLabel: heatCellLabel,
@@ -505,6 +561,8 @@
     gradientGreenRed: gradientGreenRed,
     withAlpha: withAlpha,
     logAxis: logAxis,
+    timeAxis: timeAxis,
+    bandAreas: bandAreas,
     yearLabelFormatter: yearLabelFormatter,
     yearLabelStep: yearLabelStep,
     baseLineOption: baseLineOption,

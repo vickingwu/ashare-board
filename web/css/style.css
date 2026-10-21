@@ -237,6 +237,14 @@ table.data-table td.dim { color: #9CA3AF; }
 .chart-heat { height: 820px; }
 .chart-heat-ind { height: 780px; }
 .chart-turnover { height: 640px; }
+.chart-trend { height: 720px; }
+.chart-fg { height: 760px; }
+.fg-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 22px; margin: 4px 0 10px; }
+.fg-big { font-size: 44px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.fg-band { font-size: 18px; font-weight: 600; padding: 2px 10px; border-radius: 6px; color: #fff; }
+.fg-date { color: var(--muted); font-size: 13px; }
+.fg-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.fg-table .def { color: var(--muted); font-size: 12.5px; text-align: left; white-space: normal; min-width: 240px; }
 .readout { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 6px 0 10px; font-size: 14px; color: var(--muted); }
 .readout strong { color: var(--fg); font-size: 16px; font-variant-numeric: tabular-nums; font-weight: 600; }
 .chart-tall { height: 520px; }
@@ -277,6 +285,9 @@ table.data-table td.dim { color: #9CA3AF; }
   .chart-heat { height: 620px; }
   .chart-heat-ind { height: 600px; }
   .chart-turnover { height: 520px; }
+  .chart-trend { height: 600px; }
+  .chart-fg { height: 640px; }
+  .fg-big { font-size: 36px; }
   .tools-group { margin-right: 6px; }
   .range-btn { padding: 4px 8px; font-size: 12px; }
   .readout { font-size: 13px; gap: 2px 12px; }

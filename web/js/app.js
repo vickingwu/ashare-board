@@ -33,6 +33,12 @@
     heatLow: '#F2F6FC',    // 单色热力图：最冷
     heatHigh: '#1F5FBF',   // 单色热力图：最热
     neutral: '#FFFFFF',    // 红绿双向色阶的中点
+    breadth250: '#1D4ED8', // 趋势温度：站上 250 日线占比
+    breadth50: '#60A5FA',  // 趋势温度：站上 50 日线占比
+    macdPos: '#0F766E',    // 趋势温度：行业 MACD DIF>0 占比
+    macdHist: '#94A3B8',   // 趋势温度：行业 MACD 柱>0 占比（对照）
+    fgLine: '#7C2D12',     // 恐贪指数：综合分折线
+    fgBands: ['#2B6CB0', '#90C2E7', '#CBD5E1', '#F4A261', '#C53030'],  // 恐贪指数五段底色：极度恐慌 → 极度贪婪
     up: '#D64541',
     down: '#1E9E5A',
     muted: '#6B7280',
@@ -377,14 +383,17 @@
 
     // 把配色写进 CSS 变量，样式表可直接使用 var(--idx-000300) 等
     var root = document.documentElement.style;
-    Object.keys(palette).forEach(function (k) { root.setProperty('--idx-' + k, palette[k]); });
+    Object.keys(palette).forEach(function (k) {
+      if (typeof palette[k] === 'string') root.setProperty('--idx-' + k, palette[k]);   // 数组值（fgBands）不写
+    });
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+  // defer 脚本在文档解析完成（readyState 已变为 interactive）之后、DOMContentLoaded 之前按序执行，
+  // 所以必须等 DOMContentLoaded 再启动：setTimeout(0) 可能抢在尚未下载完的面板脚本之前运行，导致注册表为空、页面没有面板。
+  if (document.readyState !== 'complete') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
   } else {
-    // defer 脚本在 DOMContentLoaded 之前按序执行，正常不会走到这里；保险起见等面板脚本注册完再启动
-    setTimeout(init, 0);
+    setTimeout(init, 0);   // 脚本在页面加载完成后才被插入时的兜底
   }
 
   window.AshareBoard = {
