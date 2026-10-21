@@ -48,11 +48,13 @@ USER_AGENT = (
 
 # 每个主机两次请求之间的最小间隔（秒）。腾讯行情是批量接口，稍快一点即可；
 # 乐咕与中债登是单页面站点，放慢到 1 秒。
+# 中证指数官网 index-perf 接口对短时突发限流：2026-10-21 本机与 GitHub runner 都是 8 秒内 12 个小增量请求通过后，
+# 之后的请求连续 HTTP 403，几分钟后自愈（全史大响应天然约 1 秒 1 个，没触发过）。放慢到 2 秒，15 条序列约 30 秒。
 HOST_MIN_INTERVAL: Dict[str, float] = {
     "default": 0.5,
     "qt.gtimg.cn": 0.3,
     "web.ifzq.gtimg.cn": 0.3,
-    "www.csindex.com.cn": 0.6,
+    "www.csindex.com.cn": 2.0,
     "legulegu.com": 1.0,
     "yield.chinabond.com.cn": 1.0,
     "www.swsresearch.com": 0.8,
