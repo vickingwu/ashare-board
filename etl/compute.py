@@ -16,9 +16,22 @@
   （指数基日 1999-12-30 的 1000 点因此是 2000 年的基准）；年度涨跌幅 = 年末/上年末 − 1，
   两端任一缺失即 None，不用邻近年份补；年化只跨完整年度；
 * 排名 ``rank_desc``：1 = 最大，相同值共享较小名次（1,2,2,4），None 不参与也不占名次。
+
+技术指标口径（``ema`` / ``macd`` / ``rsi`` / ``realized_vol`` / ``rolling_percentile`` 等，全部 None 安全、平行数组）：
+* EMA 种子：k = 2/(n+1)，以首个非 None 值为种子（不是前 n 个的均值），前导 None 保留；
+  序列中间出现 None 视为输入错误抛 ``PanelError``，调用方先 ``drop_none`` 再算；
+* MACD(12,26,9)：DIF = EMA12 − EMA26，DEA = EMA9(DIF)，柱 = 2 × (DIF − DEA)；
+  下标 < ``MACD_WARMUP``（34，即第 35 个观测起）一律置 None 作为预热期；
+* RSI(n=14) 用 Wilder 平滑：下标 n 处 = 100 − 100/(1 + 前 n 个涨跌的简单均值之比)，
+  之后 avg = (avg × (n−1) + x) / n；平均跌幅为 0 时 RSI = 100；下标 < n 为 None；
+* 已实现波动率 = 最近 n 个对数收益的样本标准差（n−1）× √250 × 100（年化按 250 个交易日）；
+* 滚动分位 ``rolling_percentile``：含等号的名次 100 × #(w ≤ x) / N，窗口 = 含当前值的最近
+  ``window`` 条记录，N = 窗口内非 None 的条数，N < ``min_obs`` 或当前值为 None 时为 None；
+* 区间标签 ``band_label``：区间左闭右开 ``[lo, hi)``，最后一个区间右端闭合，None → None。
 """
 from __future__ import annotations
 
+import bisect
 import math
 from datetime import date, timedelta
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -379,3 +392,196 @@ def align_by_month(series: Dict[str, Tuple[Sequence[str], Sequence]]
     out_vals = {name: [sampled[name][m][1] for m in months] for name in sampled}
     out_dates = {name: [sampled[name][m][0] for m in months] for name in sampled}
     return months, out_vals, out_dates
+
+
+# --------------------------------------------------------------------------- 技术指标
+MACD_WARMUP = 34
+
+
+def _first_present(values: Sequence[Optional[float]]) -> Optional[int]:
+    for i, v in enumerate(values):
+        if v is not None:
+            return i
+    return None
+
+
+def ema(values: Sequence[Optional[float]], n: int) -> ValueList:
+    """指数移动平均：k = 2/(n+1)，以首个非 None 值为种子；前导 None 保留，中间出现 None 抛 PanelError。"""
+    if n <= 0:
+        raise PanelError(f"EMA 周期必须为正: {n}")
+    k = 2.0 / (n + 1.0)
+    out: ValueList = []
+    prev: Optional[float] = None
+    for i, v in enumerate(values):
+        if v is None:
+            if prev is not None:
+                raise PanelError(f"EMA 输入第 {i} 位为 None（序列中间不允许缺失，请先 drop_none）")
+            out.append(None)
+            continue
+        prev = float(v) if prev is None else prev + k * (float(v) - prev)
+        out.append(prev)
+    return out
+
+
+def macd(values: Sequence[Optional[float]], fast: int = 12, slow: int = 26, signal: int = 9
+         ) -> Tuple[ValueList, ValueList, ValueList]:
+    """MACD → (dif, dea, hist)：DIF = EMA(fast) − EMA(slow)，DEA = EMA(signal)(DIF)，hist = 2 × (DIF − DEA)。
+
+    自首个非 None 值起的前 ``MACD_WARMUP`` 个位置（即任何下标 < MACD_WARMUP）一律为 None 作为预热期。
+    """
+    e_fast = ema(values, fast)
+    e_slow = ema(values, slow)
+    dif: ValueList = [None if a is None or b is None else a - b for a, b in zip(e_fast, e_slow)]
+    dea = ema(dif, signal)
+    hist: ValueList = [None if a is None or b is None else 2.0 * (a - b) for a, b in zip(dif, dea)]
+    first = _first_present(values)
+    cut = len(values) if first is None else min(len(values), first + MACD_WARMUP)
+    for i in range(cut):
+        dif[i] = dea[i] = hist[i] = None
+    return dif, dea, hist
+
+
+def rsi(values: Sequence[Optional[float]], n: int = 14) -> ValueList:
+    """RSI(n)，Wilder 平滑。
+
+    下标 n（相对首个非 None 值）处 = 100 − 100/(1 + avgGain/avgLoss)，avgGain/avgLoss 为前 n 个涨跌幅
+    的简单均值；之后 avg = (avg × (n−1) + x) / n。avgLoss 为 0 时 RSI = 100；前 n 个位置为 None；
+    序列中间出现 None 抛 PanelError。
+    """
+    if n <= 0:
+        raise PanelError(f"RSI 周期必须为正: {n}")
+    out: ValueList = [None] * len(values)
+    first = _first_present(values)
+    if first is None:
+        return out
+    gains: List[float] = []
+    losses: List[float] = []
+    avg_gain: Optional[float] = None
+    avg_loss: Optional[float] = None
+    for i in range(first + 1, len(values)):
+        v, prev = values[i], values[i - 1]
+        if v is None or prev is None:
+            raise PanelError(f"RSI 输入第 {i} 位为 None（序列中间不允许缺失，请先 drop_none）")
+        x = float(v) - float(prev)
+        g, l = (x, 0.0) if x > 0 else (0.0, -x)
+        if avg_gain is None:
+            gains.append(g)
+            losses.append(l)
+            if len(gains) < n:
+                continue
+            avg_gain = sum(gains) / n
+            avg_loss = sum(losses) / n
+        else:
+            avg_gain = (avg_gain * (n - 1) + g) / n
+            avg_loss = (avg_loss * (n - 1) + l) / n
+        if avg_loss == 0:
+            out[i] = 100.0
+        else:
+            out[i] = 100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
+    return out
+
+
+def log_returns(values: Sequence[Optional[float]]) -> ValueList:
+    """对数收益 ``[None] + ln(v[i] / v[i−1])``；任一端为 None 或 ≤ 0 时为 None。"""
+    if not values:
+        return []
+    out: ValueList = [None]
+    for i in range(1, len(values)):
+        a, b = values[i - 1], values[i]
+        if a is None or b is None or a <= 0 or b <= 0:
+            out.append(None)
+        else:
+            out.append(math.log(b / a))
+    return out
+
+
+def rolling_std(values: Sequence[Optional[float]], n: int, ddof: int = 1) -> ValueList:
+    """n 期滚动标准差（含当期，自由度 n − ddof）；前 n−1 个位置、或窗口内任一值为 None 时为 None。"""
+    out: ValueList = []
+    if n - ddof <= 0:
+        return [None] * len(values)
+    for i in range(len(values)):
+        if i + 1 < n:
+            out.append(None)
+            continue
+        window = values[i + 1 - n:i + 1]
+        if any(v is None for v in window):
+            out.append(None)
+            continue
+        m = sum(window) / n
+        var = sum((v - m) ** 2 for v in window) / (n - ddof)
+        out.append(math.sqrt(var))
+    return out
+
+
+def realized_vol(values: Sequence[Optional[float]], n: int = 20, periods: int = 250) -> ValueList:
+    """已实现波动率（%，年化）= 最近 n 个对数收益的样本标准差 × √periods × 100。"""
+    scale = math.sqrt(periods) * 100.0
+    return [None if s is None else s * scale for s in rolling_std(log_returns(values), n)]
+
+
+def pct_change_n(values: Sequence[Optional[float]], n: int) -> ValueList:
+    """n 期变化率（%）= v[i] / v[i−n] − 1；i < n、任一端为 None 或 ≤ 0 时为 None。"""
+    out: ValueList = []
+    for i in range(len(values)):
+        if i < n or n <= 0:
+            out.append(None)
+            continue
+        a, b = values[i - n], values[i]
+        if a is None or b is None or a <= 0 or b <= 0:
+            out.append(None)
+        else:
+            out.append(100.0 * b / a - 100.0)
+    return out
+
+
+def ratio_to_rolling_mean(values: Sequence[Optional[float]], n: int) -> ValueList:
+    """v / 其 n 期滚动均值（含当期）；均值为 None 或 0、或 v 为 None 时为 None。"""
+    means = rolling_mean(values, n)
+    return [None if v is None or m is None or m == 0 else v / m for v, m in zip(values, means)]
+
+
+def rolling_percentile(values: Sequence[Optional[float]], window: int = 500, min_obs: int = 250) -> ValueList:
+    """滚动含等号分位：100 × #(w ≤ x) / N，w 取含当前值的最近 ``window`` 条记录中的非 None 值。
+
+    N = 窗口内非 None 条数；当前值为 None 或 N < ``min_obs`` 时为 None。用 bisect 维护有序窗口，O(N log W)。
+    """
+    out: ValueList = []
+    if window <= 0:
+        return [None] * len(values)
+    sorted_window: List[float] = []
+    for i, x in enumerate(values):
+        if x is not None:
+            bisect.insort(sorted_window, x)
+        j = i - window
+        if j >= 0 and values[j] is not None:
+            del sorted_window[bisect.bisect_left(sorted_window, values[j])]
+        n_obs = len(sorted_window)
+        if x is None or n_obs < min_obs or n_obs == 0:
+            out.append(None)
+        else:
+            out.append(100.0 * bisect.bisect_right(sorted_window, x) / n_obs)
+    return out
+
+
+def mean_of_available(values: Sequence[Optional[float]], min_count: int) -> Tuple[Optional[float], int]:
+    """非 None 值的均值与个数 → (mean | None, count)；个数 < ``min_count`` 时均值为 None。"""
+    vals = [v for v in values if v is not None]
+    if len(vals) < min_count or not vals:
+        return None, len(vals)
+    return sum(vals) / len(vals), len(vals)
+
+
+def band_label(x: Optional[float], bands: Sequence[Dict[str, object]]) -> Optional[str]:
+    """按区间表取标签：``bands = [{lo, hi, label}]`` 升序，区间 ``[lo, hi)`` 左闭右开、最后一个右端闭合。
+
+    x 为 None 或落在所有区间之外时返回 None。
+    """
+    if x is None or not bands:
+        return None
+    last = len(bands) - 1
+    for i, b in enumerate(bands):
+        lo, hi = float(b["lo"]), float(b["hi"])  # type: ignore[arg-type]
+        if lo <= x < hi or (i == last and x == hi):
+            return str(b["label"])
+    return None

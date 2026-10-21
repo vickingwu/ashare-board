@@ -1,3 +1,7 @@
 requests==2.34.2
 xlrd==2.0.2
 tzdata==2026.5
+# baostock 依赖 pandas / numpy（纯二进制 wheel，Python ≥ 3.11）
+baostock==0.9.4
+numpy==2.5.4
+pandas==3.0.6

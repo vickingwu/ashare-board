@@ -12,7 +12,11 @@
 * TLS 一律严格校验，绝不关闭证书校验。个别站点（www.swsresearch.com）握手时不发中间证书，
   把其公开的中间证书 PEM 放进 ``etl/certs/``，``ca_bundle_path()`` 会把 certifi 根证书与这些
   PEM 拼成 ``cache/ca_bundle.pem`` 交给 Session；证书校验失败直接抛 ``PanelError``，不重试；
-* ``write_json_atomic(..., compact=True)`` 输出不缩进的紧凑 JSON，供体积较大的面板文件使用。
+* ``write_json_atomic(..., compact=True)`` 输出不缩进的紧凑 JSON，供体积较大的面板文件使用；
+* 环境变量开关统一经 ``env_int(name, default)``（取整数，缺失或非法时用默认值）与
+  ``env_flag(name)``（``"1"/"true"/"yes"`` 为真，不区分大小写）读取，例如全市场日线库的
+  ``ASHARE_MARKET_BUDGET_MIN`` / ``ASHARE_MARKET_ALLOW_PARTIAL``；
+* ``STATE_DIR``（``state/``）存放入库的种子快照（如 ``market_seed.zip``），与可重建的 ``cache/`` 区分。
 """
 from __future__ import annotations
 
@@ -35,6 +39,7 @@ DATA_DIR = ROOT / "data"
 CACHE_DIR = ROOT / "cache"
 LOGS_DIR = ROOT / "logs"
 CERTS_DIR = ROOT / "etl" / "certs"
+STATE_DIR = ROOT / "state"
 CA_BUNDLE_PATH = CACHE_DIR / "ca_bundle.pem"
 for _d in (DATA_DIR, CACHE_DIR, LOGS_DIR):
     _d.mkdir(parents=True, exist_ok=True)
@@ -59,6 +64,7 @@ HOST_MIN_INTERVAL: Dict[str, float] = {
     "yield.chinabond.com.cn": 1.0,
     "www.swsresearch.com": 0.8,
     "www.swhyresearch.com": 0.8,
+    "query.sse.com.cn": 1.0,
 }
 MAX_ATTEMPTS = 5
 BACKOFF_CAP = 60.0
@@ -68,6 +74,26 @@ MARKET_CLOSE_HOUR = 16
 
 class PanelError(Exception):
     """面板级别的可预期失败（数据源格式变化、校验不过等）。"""
+
+
+# --------------------------------------------------------------------------- 环境变量
+def env_int(name: str, default: int) -> int:
+    """读取整数环境变量；缺失、为空或不是整数时返回 ``default``。"""
+    raw = os.environ.get(name)
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        return int(str(raw).strip())
+    except ValueError:
+        return default
+
+
+def env_flag(name: str) -> bool:
+    """布尔开关：环境变量取 ``"1"`` / ``"true"`` / ``"yes"``（不区分大小写）时为真，其它一律为假。"""
+    raw = os.environ.get(name)
+    if raw is None:
+        return False
+    return str(raw).strip().lower() in ("1", "true", "yes")
 
 
 # --------------------------------------------------------------------------- 时间
