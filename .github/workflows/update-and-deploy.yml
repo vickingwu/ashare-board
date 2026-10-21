@@ -1,7 +1,10 @@
 # 每个交易日自动刷数据并发布到 GitHub Pages（https://vickingwu.github.io/ashare-board/）。
 #
 # 触发方式：
-#   schedule          UTC 08:40 周一至周五 = 北京时间 16:40（A 股 15:00 收盘，各数据源的当日数据在 16:30 前后齐全）
+#   schedule          每个交易日 20:30 与次日 07:30（北京时间）各更新一次。A 股 15:00 收盘，但各数据源的当日
+#                     数据要到 16:40 之后至次日早上才陆续发布（2026-10-20 实测：中债登 16:40–16:57、乐咕 17:25–17:45、
+#                     中证指数与申万 18:25–18:45；申万按 T+1 口径，有时次日才有），16:40 跑只能拿到 T−1。
+#                     20:30 这次拿当日数据；07:30 这次补申万等发得晚的源，缓存命中后每次只多 2–4 分钟。
 #   workflow_dispatch 手动运行；可选 only 参数原样传给 etl/build_data.py --only
 #   push main         本地 make update 后 git push，也会重新发布（这种情况只跑 deploy，不再抓数）
 #
@@ -11,7 +14,8 @@ name: update-and-deploy
 
 on:
   schedule:
-    - cron: '40 8 * * 1-5'   # UTC 08:40 周一至周五 = Asia/Shanghai 16:40
+    - cron: '30 12 * * 1-5'  # UTC 12:30 周一至周五 = Asia/Shanghai 20:30 周一至周五：收当日的中证 / 乐咕 / 中债登数据
+    - cron: '30 23 * * 1-5'  # UTC 23:30 周一至周五 = Asia/Shanghai 07:30 周二至周六：补申万 T+1 发布与其它发得晚的源
   workflow_dispatch:
     inputs:
       only:

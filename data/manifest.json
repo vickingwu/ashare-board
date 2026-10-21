@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-20T21:49:43+08:00",
+ "generated": "2026-10-21T10:22:10+08:00",
  "panels": {
   "coverage": {
    "ok": true,
@@ -20,31 +20,31 @@
   "decomp": {
    "ok": true,
    "asOf": "2026-09-30",
-   "generated": "2026-10-20T21:49:42+08:00",
+   "generated": "2026-10-21T10:22:10+08:00",
    "error": null,
    "durationSec": 0.1,
    "static": false
   },
   "erp": {
    "ok": true,
-   "asOf": "2026-10-19",
-   "generated": "2026-10-20T21:49:42+08:00",
+   "asOf": "2026-10-20",
+   "generated": "2026-10-21T10:22:10+08:00",
    "error": null,
    "durationSec": 0.0,
    "static": false
   },
   "valuation": {
    "ok": true,
-   "asOf": "2026-10-19",
-   "generated": "2026-10-20T21:49:42+08:00",
+   "asOf": "2026-10-20",
+   "generated": "2026-10-21T10:22:10+08:00",
    "error": null,
    "durationSec": 0.0,
    "static": false
   },
   "widebase": {
    "ok": true,
-   "asOf": "2026-10-19",
-   "generated": "2026-10-20T21:49:43+08:00",
+   "asOf": "2026-10-20",
+   "generated": "2026-10-21T10:22:10+08:00",
    "error": null,
    "durationSec": 0.1,
    "static": false

@@ -8,7 +8,7 @@ A 股长周期看板：Python 脚本抓公开数据算成静态 JSON，浏览器
 
 地址：**https://vickingwu.github.io/ashare-board/** —— 浏览器直接打开，不用 clone、不用装 Python。
 
-- 数据由 GitHub Actions 自动刷新：每个交易日（周一至周五）**北京时间 16:40** 运行 `.github/workflows/update-and-deploy.yml`，抓数 → 把变化的 `data/*.json` 提交回 `main` → 重新发布页面；全程约 6–10 分钟。
+- 数据由 GitHub Actions 自动刷新：**每个交易日 20:30 与次日 07:30（北京时间）各更新一次**，运行 `.github/workflows/update-and-deploy.yml`，抓数 → 把变化的 `data/*.json` 提交回 `main` → 重新发布页面；缓存命中时每次约 3–6 分钟。之所以不在收盘后马上跑：各数据源的当日数据要到 16:40 之后至次日早上才陆续发布（中债登约 16:40–17:00、乐咕约 17:30–17:45、中证指数与申万约 18:30–18:45，申万按 T+1 口径有时次日才有），20:30 这次拿到当日数据，07:30 这次补上发得晚的源。
 - 手动刷新：仓库页 **Actions → update-and-deploy → Run workflow**。可选参数 `only` 填面板 id（逗号分隔，如 `erp,valuation`），只刷这几个面板；留空刷全部。
 - 本地刷新也会发布：`make update` 之后 `git push`，push 到 `main` 会触发同一个 workflow 只跑发布这一步。
 - 出错怎么看：某个面板抓数失败时页面照常发布，该面板标题旁出现黄色徽标「本次更新失败，显示 … 的上一版数据」，原因在 `data/manifest.json` 的 `error` 字段；完整日志在该次运行的 Artifacts 里（名为 `logs`，保留 14 天）。整个运行失败（装依赖、推送出错）则不发布，页面保持上一版。
@@ -21,7 +21,7 @@ A 股长周期看板：Python 脚本抓公开数据算成静态 JSON，浏览器
 2. **开启 Pages**：Settings → Pages → Build and deployment → Source 选 **GitHub Actions**。如果第一次运行 workflow 时 `configure-pages` 已经自动开好了，这一步会显示已启用，跳过即可。
 3. **跑一次**：Actions → update-and-deploy → Run workflow（分支选 `main`），等 6–10 分钟，运行页右侧 `deploy` 作业会给出页面地址，打开 https://vickingwu.github.io/ashare-board/ 。
 
-之后无需再操作，每个交易日 16:40 自动刷新。
+之后无需再操作，每个交易日 20:30 与次日 07:30（北京时间）各自动刷新一次。
 
 ## 安装与运行（macOS）
 
@@ -89,7 +89,7 @@ ashare-board/
 ├── cache/  logs/            # 运行期产物，不入库（cache/ca_bundle.pem 也在这里生成）
 ├── tests/                   # 离线单元测试（unittest），fixtures/ 是各接口的真实响应裁剪件（sws_* 为申万接口、legulegu_sw_overview_trim.html 为乐咕行业总览）
 ├── scripts/build_site.py    # 把 web/ + data/ 拼成 GitHub Pages 发布目录 _site/
-├── .github/workflows/update-and-deploy.yml   # 每个交易日 16:40 抓数、提交、发布到 Pages
+├── .github/workflows/update-and-deploy.yml   # 每个交易日 20:30 与次日 07:30（北京时间）抓数、提交、发布到 Pages
 ├── serve.py                 # 本地 HTTP 服务（web/ + /data/，只监听 127.0.0.1）
 ├── Makefile  requirements.txt  NOTICE.md
 ```
@@ -166,7 +166,7 @@ ashare-board/
 - **全市场**：以中证全指为全体（剔除 ST 与上市不久的新股），只数略少于交易所上市公司总数。
 - **中证A500**：按行业均衡选样，不是规模层，与沪深300 的重叠度见矩阵。
 - **交易日估算**：页面顶部「N 个交易日前」只按周一至周五计数，未扣节假日。
-- **指数日行情（widebase / valuation / decomp）**：中证指数官网 `https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode={code}&startDate=YYYYMMDD&endDate=YYYYMMDD`，需带 `Referer`，返回 JSON（`code` 是字符串 `"200"`）。不限区间，`startDate=20050101` 到今天一次返回全部历史（沪深300 约 5,290 行、1.8 MB）。每行用 `tradeDate`、`close`、`peg`（滚动市盈率，价格与全收益序列上数值相同）。第 0 行永远是 `20050101`（周六）的基点值，即使指数基日更晚，所以周末日期的行一律丢弃；只给已收盘交易日。不存在的代码返回 `data: []` 而不是错误。全收益指数代码以 `H` 开头：`H00300` 沪深300、`H00905` 中证500、`H00852` 中证1000、`H00906` 中证800、`H00985` 中证全指、`H20269` 红利低波。缓存 `cache/csindex_hist/{code}.json` 保存整条历史，之后每次只请求最后缓存日前 15 天到今天的增量并按日期合并。
+- **指数日行情（widebase / valuation / decomp）**：中证指数官网 `https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode={code}&startDate=YYYYMMDD&endDate=YYYYMMDD`，需带 `Referer`，返回 JSON（`code` 是字符串 `"200"`）。不限区间，`startDate=20050101` 到今天一次返回全部历史（沪深300 约 5,290 行、1.8 MB）。每行用 `tradeDate`、`close`、`peg`（滚动市盈率，价格与全收益序列上数值相同）。**第 0 行的日期永远等于请求的 `startDate`**，哪怕那天不是交易日：此时它是一行占位，开高低收与 `peg` 照抄 `startDate` 之后第一个交易日的值（全量请求的第 0 行是 `20050101` 周六、值同 2005-01-04；`startDate=20261005` 国庆假期时第 0 行日期是 10-05、值同 10-08）。所以周末日期的行一律丢弃；第 0 行日期等于 `startDate` 且这天不在缓存里时也丢弃（唯一例外：全量请求且该行收盘价与下一行不同，说明 `startDate` 本身是交易日）。只给已收盘交易日。不存在的代码返回 `data: []` 而不是错误。全收益指数代码以 `H` 开头：`H00300` 沪深300、`H00905` 中证500、`H00852` 中证1000、`H00906` 中证800、`H00985` 中证全指、`H20269` 红利低波。缓存 `cache/csindex_hist/{code}.json` 保存整条历史，之后每次只请求「最后缓存日当天 → 今天」的增量并按日期合并（最后缓存日是已知交易日，接口第 0 行就是它的真实行情，同日新值覆盖旧值）；读缓存时丢掉周末日期的行。早期版本的增量窗口是「最后缓存日 − 15 天」，`startDate` 落在工作日假期时会把占位行合并进缓存，用 `python -m etl.sources.csindex_hist --purge-dates 2026-10-01` 按日期清掉。
 - **没有全收益指数的三条**：中证A500（000510）、中证2000（932000）、科创50（000688）在中证官网没有发布全收益版本（`H00510` / `H32000` / `H00688` 返回空），图中用价格指数代替并标「价格」，长期会低估它们的真实回报。中证A500 于 2024 年发布，2005–2024 的点位是官方回溯值。创业板指全收益（399606）腾讯 K 线接口返回空，暂未纳入。
 - **指数 PE（valuation / erp / decomp）**，每个指数只用一个来源，不混接：
   - 乐咕乐股（沪深300 2005-04 起、上证50 2005-01 起、中证500 / 中证800 2007-01 起、中证1000 2014-10 起）：两步请求。先 `GET https://legulegu.com/stockdata/sz50-ttm-lyr` 拿页面，页面 `<meta name="_csrf">` 是 CSRF 令牌，cookie 由共享 Session 保存；再 `GET https://legulegu.com/api/stockdata/index-basic-pe?token=<md5(当天日期 'YYYY-MM-DD')>&indexCode=000300.SH`，头部 `Referer` 指向第一步页面、`X-CSRF-TOKEN` 为 meta 值、`X-Requested-With: XMLHttpRequest`；`indexCode` 必须带 `.SH` / `.SZ` 后缀；日期用北京时间。响应里 **`addTtmPe` 才是整体法（市值加权）滚动市盈率，`ttmPe` 是等权口径**（沪深300 等权约 29 vs 整体法约 12），本看板一律用 `addTtmPe`。非会员只返回每月一条（月末交易日）加最新交易日一条，正好够用。乐咕只覆盖 000016 / 000300 / 000009 / 399673 / 000905 / 000010 / 399324 / 399330 / 000852 / 000015 / 000903 / 000906，其它指数返回 `data: []`。缓存 `cache/legulegu/{code}_{YYYYMMDD}.json`（空结果也缓存，当天不再重问）。
@@ -201,6 +201,8 @@ ashare-board/
 | 乐咕返回空数据（日志「乐咕无此指数」） | 正常：乐咕只覆盖上面列出的 12 个指数，其余本来就走中证 `peg` |
 | 中债登超时 / 很慢 | 接口本身每年 5–13 秒，超时 120 秒后会重试。按年缓存在 `cache/chinabond/`，重跑只补缺的年份，不会从头下载 |
 | 日志「csindex XXX 返回空数据」 | 代码不存在或接口变化：全收益代码以 `H` 开头（如 `H00300`），价格指数是 6 位数字；中证A500 / 中证2000 / 科创50 没有全收益版本 |
+| 本地 `make update` 后 `git push` 被拒（non-fast-forward） | bot 每个交易日会往 `main` 推一个 `data: … 自动更新` 提交。本地改数据、推送之前先 `git pull`（再 `make update`、再 push）；已经本地提交了就 `git pull --rebase` 后再 push |
+| widebase / valuation / decomp 的日期序列里出现假期（如 2026-10-01） | 早期版本的增量请求从「最后缓存日 − 15 天」起，`startDate` 落在工作日假期时接口会补一行占位（日期 = `startDate`、值同下一交易日）。现已改为从最后缓存日当天起并丢弃占位首行；已经合并进缓存的用 `python -m etl.sources.csindex_hist --purge-dates 2026-10-01` 清掉后重跑 `make update` |
 | 日志「中债 YYYY 只有 N 行，疑似接口变化」 | 往年数据应有约 250 行；少于 200 行多半是页面结构变了，看 `etl/sources/chinabond.py` 的表格解析 |
 | 估值面板某指数标「样本短」 | 月末 PE 样本不足 60 个（中证2000 自 2023-06、中证A500 自 2024-09），分位数字参考意义有限，不是错误 |
 | widebase / valuation / decomp 的「数据截至」比当天早 | 指数日行情只给已收盘交易日；收益拆解按已完结月份的月末算，`asOf` 是上个月末 |
