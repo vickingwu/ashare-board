@@ -1,0 +1,36 @@
+# 数据源连通性与速度诊断：只能手动运行，不写缓存、不提交、不发布。
+# 用途：在 GitHub runner（美国 IP）上确认 Baostock（TCP 10030）与各 HTTP 源可达、测单次查询耗时，
+# 为全市场日线面板（M3）的架构决策提供 runner 侧证据。日志直接看运行页。
+name: diagnose-sources
+
+on:
+  workflow_dispatch:
+    inputs:
+      stocks:
+        description: '连续查询多少只个股来估算 Baostock 速度（默认 10）'
+        required: false
+        default: '10'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install baostock requests
+
+      - run: pip freeze
+
+      - name: 诊断数据源
+        env:
+          STOCKS: ${{ inputs.stocks }}
+        run: python scripts/diagnose_sources.py --stocks "${STOCKS:-10}"
