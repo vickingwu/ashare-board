@@ -1,6 +1,7 @@
 # 数据源连通性与速度诊断：只能手动运行，不写缓存、不提交、不发布。
 # 用途：在 GitHub runner（美国 IP）上确认 Baostock（TCP 10030）与各 HTTP 源可达、测单次查询耗时，
-# 为全市场日线面板（M3）的架构决策提供 runner 侧证据。日志直接看运行页。
+# 为全市场日线面板（M3）的架构决策提供 runner 侧证据；http_only=true 时跳过 Baostock，只验 HTTP 源
+# （含 M4 新增的 东方财富数据中心 / 上海黄金交易所 / 上交所每日概况）。日志直接看运行页。
 name: diagnose-sources
 
 on:
@@ -11,6 +12,11 @@ on:
         required: false
         default: '10'
         type: string
+      http_only:
+        description: '只跑 HTTP 连通性，跳过 Baostock（传 --no-baostock）'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -33,4 +39,8 @@ jobs:
       - name: 诊断数据源
         env:
           STOCKS: ${{ inputs.stocks }}
-        run: python scripts/diagnose_sources.py --stocks "${STOCKS:-10}"
+          HTTP_ONLY: ${{ inputs.http_only }}
+        run: |
+          EXTRA=""
+          if [ "${HTTP_ONLY}" = "true" ]; then EXTRA="--no-baostock"; fi
+          python scripts/diagnose_sources.py --stocks "${STOCKS:-10}" ${EXTRA}

@@ -23,11 +23,17 @@
 不会再有落在假期上的 ``startDate``。读缓存时顺手丢掉周末日期的行（自愈）。同一天内按
 ``cache_is_fresh`` 规则不重复请求。历史上合并进缓存的假日占位行用
 ``python -m etl.sources.csindex_hist --purge-dates 2026-10-01`` 一次性清掉。
+
+限流（2026-10-23 观察）：2 秒间隔下连续 16 个全史请求（约 45 秒）在第 16 个收到 HTTP 403，几分钟后自愈；
+结合 10-21 的「8 秒 12 个 → 403」，实际上限约每分钟 15 个请求。对策：主机最小间隔 3 秒
+（``common.HOST_MIN_INTERVAL``），且 ``_request`` 在 ``http_get`` 抛出 ``HTTP 403`` 时暂停 ``RATE_LIMIT_SLEEP``
+（90 秒）后**只重试一次**；``http_get`` 本身仍保持「4xx 不重试」。
 """
 from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any, Collection, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
 
@@ -42,6 +48,8 @@ HEADERS = {"Referer": "https://www.csindex.com.cn/", "Accept": "application/json
 FULL_START = "20050101"
 CACHE_SUB = "csindex_hist"
 TIMEOUT = 60
+# 突发限流（HTTP 403）后的暂停秒数，之后只重试一次；测试里打成 0
+RATE_LIMIT_SLEEP = 90
 
 Row = Tuple[str, float, Optional[float]]   # (YYYY-MM-DD, close, pe|None)
 
@@ -105,7 +113,14 @@ def parse_perf(body: bytes, start: Optional[str] = None, known_dates: Collection
 
 def _request(code: str, start: str, end: str, known_dates: Collection[str] = ()) -> Dict[str, Any]:
     url = PERF_URL + "?" + urlencode({"indexCode": code, "startDate": start, "endDate": end})
-    body, _hdr = http_get(url, timeout=TIMEOUT, headers=HEADERS)
+    try:
+        body, _hdr = http_get(url, timeout=TIMEOUT, headers=HEADERS)
+    except PanelError as e:
+        if "HTTP 403" not in str(e):
+            raise
+        log.warning("csindex %s: HTTP 403（突发限流），%d s 后重试一次", code, RATE_LIMIT_SLEEP)
+        time.sleep(RATE_LIMIT_SLEEP)
+        body, _hdr = http_get(url, timeout=TIMEOUT, headers=HEADERS)
     parsed = parse_perf(body, start=start, known_dates=known_dates)
     log.debug("csindex perf %s %s-%s: %d 字节，%d 行", code, start, end, len(body), len(parsed["rows"]))
     return parsed

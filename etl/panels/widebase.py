@@ -38,19 +38,6 @@ MIN_ROWS = 250
 WINDOWS = ((10, "cagr10y"), (5, "cagr5y"), (3, "cagr3y"))
 
 
-def _window_cagr(dates: List[str], values: List[Optional[float]], years: int) -> Optional[float]:
-    """以 end − N 年（同月同日）当天或之后的第一个有值日为起点算年化；序列不够长返回 None。"""
-    end_i = len(dates) - 1
-    target = compute.shift_years(dates[end_i], -years)
-    i = compute.first_index_on_or_after(dates, target)
-    if i is None or values[i] is None:
-        return None
-    # 起点必须落在目标日附近：序列首日比目标日晚 30 天以上说明历史不够长
-    if (compute.parse_date(dates[i]) - compute.parse_date(target)).days > 30:
-        return None
-    return compute.cagr(values[i], values[end_i], compute.years_between(dates[i], dates[end_i]))
-
-
 def compute_panel(histories: List[Dict[str, Any]]) -> Dict[str, Any]:
     """histories: [{code, trCode, name, kind, dates[], close[]}] → data。"""
     if not histories:
@@ -80,7 +67,7 @@ def compute_panel(histories: List[Dict[str, Any]]) -> Dict[str, Any]:
             "maxDrawdown": _r(compute.max_drawdown(vv)),
         }
         for n, key in WINDOWS:
-            entry[key] = _r(_window_cagr(dd, vv, n))
+            entry[key] = _r(compute.window_cagr(dd, vv, n))
         summary.append(entry)
         series_out.append({"code": h["code"], "trCode": h.get("trCode"), "name": h["name"], "kind": h["kind"],
                            "start": dd[0], "end": dd[-1], "values": values})

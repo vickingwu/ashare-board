@@ -39,9 +39,18 @@ class _FakeSession:
         self.clock = clock
         self.script = list(script)
         self.calls = []
+        self.posts = []
 
     def get(self, url, timeout=None, headers=None):
         self.calls.append((url, self.clock.now))
+        return self._next()
+
+    def post(self, url, data=None, timeout=None, headers=None):
+        self.calls.append((url, self.clock.now))
+        self.posts.append((url, data, headers))
+        return self._next()
+
+    def _next(self):
         item = self.script.pop(0)
         if isinstance(item, Exception):
             raise item
@@ -144,6 +153,56 @@ class HttpGetTest(unittest.TestCase):
         self.assertEqual(len(sess.calls), 2)
         self.assertEqual(clock.sleeps, [2.0])
         self.assertIn("ConnectionError", cm.output[0])
+
+    # ---- http_post：与 GET 共用 _http 核心
+    SGE = "https://www.sge.com.cn/graph/Dailyhq"
+
+    def _run_post(self, script, data, headers=None):
+        clock, sess, patches = self._patched(script)
+        for p in patches:
+            p.start()
+        try:
+            result = common.http_post(self.SGE, data=data, headers=headers)
+        finally:
+            for p in reversed(patches):
+                p.stop()
+        return clock, sess, result
+
+    def test_post_sends_form_data_via_session_post(self):
+        hdr = {"Referer": "https://www.sge.com.cn/sjzx/mrhq"}
+        clock, sess, result = self._run_post([_Resp(200, b'{"time":[]}')], {"instid": "Au99.99"}, hdr)
+        self.assertEqual(result[0], b'{"time":[]}')
+        self.assertEqual(len(sess.posts), 1)
+        self.assertEqual(sess.posts[0], (self.SGE, {"instid": "Au99.99"}, hdr))
+        self.assertEqual(clock.sleeps, [])
+        self.assertEqual(common.HOST_MIN_INTERVAL["www.sge.com.cn"], 1.0)
+
+    def test_post_retries_5xx_like_get(self):
+        with self.assertLogs("etl.http", level="WARNING") as cm:
+            clock, sess, result = self._run_post([_Resp(502), _Resp(200, b"ok")], {"instid": "Au99.99"})
+        self.assertEqual(result[0], b"ok")
+        self.assertEqual(len(sess.posts), 2)
+        self.assertEqual(clock.sleeps, [2.0])
+        self.assertIn("HTTP 502", cm.output[0])
+
+    def test_post_4xx_raises_immediately(self):
+        clock, sess, patches = self._patched([_Resp(403), _Resp(200)])
+        for p in patches:
+            p.start()
+        try:
+            with self.assertRaises(PanelError) as ctx:
+                common.http_post(self.SGE, data={"instid": "Au99.99"})
+        finally:
+            for p in reversed(patches):
+                p.stop()
+        self.assertIn("HTTP 403", str(ctx.exception))
+        self.assertEqual(len(sess.posts), 1)
+        self.assertEqual(clock.sleeps, [])
+
+    def test_new_hosts_have_polite_intervals(self):
+        self.assertEqual(common.HOST_MIN_INTERVAL["www.csindex.com.cn"], 3.0)
+        for host in ("datacenter-web.eastmoney.com", "www.sge.com.cn", "www.chinamoney.com.cn", "thedocs.worldbank.org"):
+            self.assertGreaterEqual(common.HOST_MIN_INTERVAL[host], 1.0)
 
     def test_real_session_uses_browser_user_agent(self):
         with mock.patch.object(common, "_session", None):

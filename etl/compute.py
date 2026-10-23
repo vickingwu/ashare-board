@@ -28,10 +28,26 @@
 * 滚动分位 ``rolling_percentile``：含等号的名次 100 × #(w ≤ x) / N，窗口 = 含当前值的最近
   ``window`` 条记录，N = 窗口内非 None 的条数，N < ``min_obs`` 或当前值为 None 时为 None；
 * 区间标签 ``band_label``：区间左闭右开 ``[lo, hi)``，最后一个区间右端闭合，None → None。
+
+宏观 / 月度口径（M4 新增，全部 None 安全）：
+* 窗口年化 ``window_cagr``：以 期末 − N 年（同月同日）当天或之后的第一个有值日为起点；该起点比目标日晚
+  30 天以上（历史不够长）或无值时为 None；
+* 滚动年化 ``rolling_annualized`` = (末/初)^(periods/n) − 1（%），n 个周期为一个窗口，periods 为一年的周期数
+  （日线 252）；``i < n`` 或两端任一为 None / ≤ 0 时为 None；
+* 滚动求和 ``rolling_sum``：窗口内任一值缺失即 None；
+* 累计值转当季 ``cumulative_to_period``：季末日期对应的累计值，一季度 = 累计值本身，之后各季 = 本季累计 −
+  上季累计；同年上一季缺失或任一为 None 时为 None；
+* 月份工具：``month_end_date`` 自然月最后一天、``months_between`` 闭区间月份列表、``align_months`` 按
+  ``YYYY-MM`` 对齐到给定月轴（缺失为 None）、``month_mean`` 按月取非 None 值的均值与条数；
+* 链式定基 ``chain_link``：``out[i] = prev × ratios[i] / 100``，prev 从 base 起算（首个环比即已作用于 base）；
+  环比为 None 或 ≤ 0 视为输入错误抛 ``PanelError``；
+* 等权均值 ``equal_weight_mean``：逐位置取各序列非 None 值的均值，非 None 个数 < min_count 时为 None；
+* 几何均值 ``geometric_mean``：空序列或任一值 ≤ 0 时为 None。
 """
 from __future__ import annotations
 
 import bisect
+import calendar
 import math
 from datetime import date, timedelta
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -570,6 +586,151 @@ def mean_of_available(values: Sequence[Optional[float]], min_count: int) -> Tupl
     if len(vals) < min_count or not vals:
         return None, len(vals)
     return sum(vals) / len(vals), len(vals)
+
+
+# --------------------------------------------------------------------------- 窗口年化 / 滚动
+def window_cagr(dates: Sequence[str], values: Sequence[Optional[float]], years: int, max_gap_days: int = 30
+                ) -> Optional[float]:
+    """以 期末 − N 年（同月同日）当天或之后的第一个有值日为起点算年化（%）；序列不够长返回 None。
+
+    起点必须落在目标日附近：序列首个可用日比目标日晚 ``max_gap_days`` 天以上说明历史不够长。
+    """
+    if not dates:
+        return None
+    end_i = len(dates) - 1
+    target = shift_years(dates[end_i], -years)
+    i = first_index_on_or_after(dates, target)
+    if i is None or values[i] is None:
+        return None
+    if (parse_date(dates[i]) - parse_date(target)).days > max_gap_days:
+        return None
+    return cagr(values[i], values[end_i], years_between(dates[i], dates[end_i]))
+
+
+def rolling_annualized(values: Sequence[Optional[float]], n: int, periods: int = 252) -> ValueList:
+    """n 期滚动年化（%）= ((v[i] / v[i−n]) ** (periods / n) − 1) × 100；i < n 或两端任一 None / ≤ 0 时为 None。"""
+    out: ValueList = []
+    if n <= 0:
+        return [None] * len(values)
+    power = periods / n
+    for i in range(len(values)):
+        if i < n:
+            out.append(None)
+            continue
+        a, b = values[i - n], values[i]
+        if a is None or b is None or a <= 0 or b <= 0:
+            out.append(None)
+        else:
+            out.append(((b / a) ** power - 1.0) * 100.0)
+    return out
+
+
+def rolling_sum(values: Sequence[Optional[float]], n: int) -> ValueList:
+    """n 期滚动求和（含当期）；前 n−1 个位置、或窗口内任一值为 None 时为 None。"""
+    out: ValueList = []
+    for i in range(len(values)):
+        if n <= 0 or i + 1 < n:
+            out.append(None)
+            continue
+        window = values[i + 1 - n:i + 1]
+        out.append(None if any(v is None for v in window) else sum(window))
+    return out
+
+
+def cumulative_to_period(dates: Sequence[str], cum: Sequence[Optional[float]]) -> ValueList:
+    """季末日期的累计值 → 当季值：每年第一个季度 = 累计值；之后 = 本季累计 − 同年上一季累计。
+
+    上一季（同年、月份 −3）在序列里缺失、或任一端为 None 时为 None。
+    """
+    by_month: Dict[str, Optional[float]] = {d[:7]: v for d, v in zip(dates, cum)}
+    out: ValueList = []
+    for d, v in zip(dates, cum):
+        if v is None:
+            out.append(None)
+            continue
+        year, month = int(d[:4]), int(d[5:7])
+        if month <= 3:
+            out.append(v)
+            continue
+        prev_key = f"{year:04d}-{month - 3:02d}"
+        prev = by_month.get(prev_key)
+        out.append(None if prev is None else v - prev)
+    return out
+
+
+# --------------------------------------------------------------------------- 月份
+def month_end_date(ym: str) -> str:
+    """``YYYY-MM`` → 该自然月最后一天 ``YYYY-MM-DD``。"""
+    y, m = int(ym[:4]), int(ym[5:7])
+    return f"{y:04d}-{m:02d}-{calendar.monthrange(y, m)[1]:02d}"
+
+
+def months_between(start_ym: str, end_ym: str) -> List[str]:
+    """闭区间 ``[start, end]`` 内的全部月份 ``YYYY-MM``；start > end 时为空。"""
+    y, m = int(start_ym[:4]), int(start_ym[5:7])
+    ey, em = int(end_ym[:4]), int(end_ym[5:7])
+    out: List[str] = []
+    while (y, m) <= (ey, em):
+        out.append(f"{y:04d}-{m:02d}")
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return out
+
+
+def align_months(axis_months: Sequence[str], keys: Sequence[str], values: Sequence) -> list:
+    """把 (keys, values) 按 ``YYYY-MM`` 对齐到 ``axis_months``；轴上没有对应键的位置为 None。"""
+    lookup = {str(k)[:7]: v for k, v in zip(keys, values)}
+    return [lookup.get(m) for m in axis_months]
+
+
+def month_mean(dates: Sequence[str], values: Sequence[Optional[float]]
+               ) -> Tuple[List[str], List[float], List[int]]:
+    """按 ``YYYY-MM`` 分组取非 None 值的均值 → (months[], means[], counts[])，月份升序。"""
+    sums: Dict[str, float] = {}
+    counts: Dict[str, int] = {}
+    for d, v in zip(dates, values):
+        if v is None:
+            continue
+        k = month_key(d)
+        sums[k] = sums.get(k, 0.0) + float(v)
+        counts[k] = counts.get(k, 0) + 1
+    months = sorted(sums)
+    return months, [sums[k] / counts[k] for k in months], [counts[k] for k in months]
+
+
+# --------------------------------------------------------------------------- 定基 / 均值
+def chain_link(ratios: Sequence[Optional[float]], base: float = 100.0) -> List[float]:
+    """环比（上期 = 100）链式定基：``out[i] = prev × ratios[i] / 100``，prev 从 ``base`` 起算。
+
+    首个环比已经作用于 base（即 base 对应「首期之前的那一期」）。环比为 None 或 ≤ 0 抛 ``PanelError``。
+    """
+    out: List[float] = []
+    prev = float(base)
+    for i, r in enumerate(ratios):
+        if r is None or r <= 0:
+            raise PanelError(f"链式定基第 {i} 位的环比无效: {r}")
+        prev = prev * float(r) / 100.0
+        out.append(prev)
+    return out
+
+
+def equal_weight_mean(series: Sequence[Sequence[Optional[float]]], min_count: int) -> ValueList:
+    """多条等长序列逐位置等权平均；该位置非 None 个数 < ``min_count`` 时为 None。"""
+    if not series:
+        return []
+    n = max(len(s) for s in series)
+    out: ValueList = []
+    for i in range(n):
+        column = [s[i] if i < len(s) else None for s in series]
+        out.append(mean_of_available(column, min_count)[0])
+    return out
+
+
+def geometric_mean(values: Sequence[Optional[float]]) -> Optional[float]:
+    """几何均值；空序列或任一值为 None / ≤ 0 时返回 None。"""
+    vals = list(values)
+    if not vals or any(v is None or v <= 0 for v in vals):
+        return None
+    return math.exp(sum(math.log(v) for v in vals) / len(vals))
 
 
 def band_label(x: Optional[float], bands: Sequence[Dict[str, object]]) -> Optional[str]:

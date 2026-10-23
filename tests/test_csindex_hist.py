@@ -229,6 +229,59 @@ class GetHistoryTest(unittest.TestCase):
         self.assertEqual(store["000300.json"]["dates"], ["2026-10-09", "2026-10-13", "2026-10-14"])
 
 
+class RateLimitRetryTest(unittest.TestCase):
+    """HTTP 403（突发限流）→ 暂停 RATE_LIMIT_SLEEP 后只重试一次；其它 4xx 直接抛出。"""
+
+    def test_403_pauses_once_then_retries(self):
+        body = (FX / "csindex_perf_000300_trim.json").read_bytes()
+        calls, slept = [], []
+
+        def fake_http_get(url, **kw):
+            calls.append(url)
+            if len(calls) == 1:
+                raise PanelError("HTTP 403 " + url)
+            return body, {}
+
+        with mock.patch.object(csindex_hist, "RATE_LIMIT_SLEEP", 0), \
+                mock.patch.object(csindex_hist, "http_get", fake_http_get), \
+                mock.patch.object(csindex_hist.time, "sleep", lambda s: slept.append(s)), \
+                self.assertLogs("etl.csindex_hist", level="WARNING") as cm:
+            parsed = csindex_hist._request("000300", csindex_hist.FULL_START, "20261023")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(slept, [0])
+        self.assertEqual(len(parsed["rows"]), 70)
+        self.assertIn("403", cm.output[0])
+        self.assertEqual(csindex_hist.RATE_LIMIT_SLEEP, 90)
+
+    def test_404_raises_immediately_without_retry(self):
+        calls = []
+
+        def fake_http_get(url, **kw):
+            calls.append(url)
+            raise PanelError("HTTP 404 " + url)
+
+        with mock.patch.object(csindex_hist, "RATE_LIMIT_SLEEP", 0), \
+                mock.patch.object(csindex_hist, "http_get", fake_http_get):
+            with self.assertRaises(PanelError) as ctx:
+                csindex_hist._request("000300", csindex_hist.FULL_START, "20261023")
+        self.assertIn("HTTP 404", str(ctx.exception))
+        self.assertEqual(len(calls), 1)
+
+    def test_second_403_propagates(self):
+        calls = []
+
+        def fake_http_get(url, **kw):
+            calls.append(url)
+            raise PanelError("HTTP 403 " + url)
+
+        with mock.patch.object(csindex_hist, "RATE_LIMIT_SLEEP", 0), \
+                mock.patch.object(csindex_hist, "http_get", fake_http_get), \
+                self.assertLogs("etl.csindex_hist", level="WARNING"):
+            with self.assertRaises(PanelError):
+                csindex_hist._request("000300", csindex_hist.FULL_START, "20261023")
+        self.assertEqual(len(calls), 2)
+
+
 class PurgeDatesTest(unittest.TestCase):
     def test_purge_dates_removes_only_listed_dates(self):
         with tempfile.TemporaryDirectory() as tmp:

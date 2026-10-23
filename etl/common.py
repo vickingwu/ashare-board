@@ -2,13 +2,19 @@
 """ETL 公共设施：路径、时区、日志、礼貌抓取、原子写 JSON、按日缓存。
 
 设计约束（见 README「数据源与口径」）：
-* 单线程、单并发：所有 HTTP 请求都经过 ``http_get``，按主机维护最小间隔；
+* 单线程、单并发：所有 HTTP 请求都经过 ``http_get`` / ``http_post``（共用 ``_http`` 核心），按主机维护最小间隔；
+  ``http_post`` 以表单（``application/x-www-form-urlencoded``）提交 ``data``，限速、重试、4xx、TLS 规则与 GET 完全一致；
 * 指数退避重试：5 次，2s → 4s → 8s → 16s（上限 60s）；
 * 失败只影响当前面板：抛 ``PanelError`` 或任何异常，由编排器隔离；
 * 写文件一律先写 ``*.json.tmp`` 再 ``os.replace``，前端永远读不到半截文件；
 * 长历史数据源（指数日行情、PE、国债收益率）的缓存按「当天 16:00 前/后」判断能否复用
   （``cache_is_fresh``）：收盘前抓的缓存只在收盘前复用，收盘后抓的当天一直复用；
   按「天数」过期的缓存（如行业父级映射）用 ``cache_age_days`` 判断；
+* 月度源按月缓存：release_day 之后的首次运行刷新一次。``monthly_fetch_month(now, release_day)`` 给出
+  「本次抓取应记为哪个月」（当日 ≥ release_day 记当月，否则记上月）；``monthly_refresh_due(fetch_month, now,
+  release_day)`` 判断是否该刷新：没抓过 → 该；缓存记的月份 ≥ 当月 → 不该；否则当日 ≥ release_day 才该。
+  于是 release_day 之前冷抓一次会记成上月，到 release_day 当天再抓一次，之后整月不再联网（宏观数据
+  release_day = 20，黄金日线 release_day = 1 = 每月首次运行补齐上月）；
 * TLS 一律严格校验，绝不关闭证书校验。个别站点（www.swsresearch.com）握手时不发中间证书，
   把其公开的中间证书 PEM 放进 ``etl/certs/``，``ca_bundle_path()`` 会把 certifi 根证书与这些
   PEM 拼成 ``cache/ca_bundle.pem`` 交给 Session；证书校验失败直接抛 ``PanelError``，不重试；
@@ -54,17 +60,23 @@ USER_AGENT = (
 # 每个主机两次请求之间的最小间隔（秒）。腾讯行情是批量接口，稍快一点即可；
 # 乐咕与中债登是单页面站点，放慢到 1 秒。
 # 中证指数官网 index-perf 接口对短时突发限流：2026-10-21 本机与 GitHub runner 都是 8 秒内 12 个小增量请求通过后，
-# 之后的请求连续 HTTP 403，几分钟后自愈（全史大响应天然约 1 秒 1 个，没触发过）。放慢到 2 秒，15 条序列约 30 秒。
+# 之后的请求连续 HTTP 403，几分钟后自愈；2026-10-23 又观察到 2 秒间隔下 16 个全史请求（约 45 秒）在第 16 个触发 403，
+# 实际上限约每分钟 15 个请求。放慢到 3 秒，26 条序列约 80–90 秒；csindex_hist 另对 403 做一次 90 秒暂停后重试。
+# 东方财富数据中心、上海黄金交易所、中国货币网、世界银行文档站都是单页面接口，统一 1 秒。
 HOST_MIN_INTERVAL: Dict[str, float] = {
     "default": 0.5,
     "qt.gtimg.cn": 0.3,
     "web.ifzq.gtimg.cn": 0.3,
-    "www.csindex.com.cn": 2.0,
+    "www.csindex.com.cn": 3.0,
     "legulegu.com": 1.0,
     "yield.chinabond.com.cn": 1.0,
     "www.swsresearch.com": 0.8,
     "www.swhyresearch.com": 0.8,
     "query.sse.com.cn": 1.0,
+    "datacenter-web.eastmoney.com": 1.0,
+    "www.sge.com.cn": 1.0,
+    "www.chinamoney.com.cn": 1.0,
+    "thedocs.worldbank.org": 1.0,
 }
 MAX_ATTEMPTS = 5
 BACKOFF_CAP = 60.0
@@ -254,21 +266,24 @@ def _throttle(host: str) -> None:
     _last_request_at[host] = time.monotonic()
 
 
-def http_get(url: str, *, timeout: float = 30, headers: Optional[Dict[str, str]] = None
-             ) -> Tuple[bytes, Dict[str, str]]:
-    """GET 一个 URL，返回 (body, headers)。
+def _http(method: str, url: str, *, timeout: float, headers: Optional[Dict[str, str]],
+          data: Optional[Dict[str, Any]] = None) -> Tuple[bytes, Dict[str, str]]:
+    """GET / POST 共用核心：单并发 + 主机限速 + 指数退避，返回 (body, headers)。
 
-    单并发 + 主机限速 + 指数退避。429/5xx/网络错误重试；其它 4xx 立即抛 PanelError；
-    TLS 证书校验失败不重试、立即抛 PanelError（证书问题不会在 16 秒内自愈）。
+    429/5xx/网络错误重试；其它 4xx 立即抛 PanelError；TLS 证书校验失败不重试、立即抛 PanelError
+    （证书问题不会在 16 秒内自愈）。POST 时 ``data`` 作为表单体提交。
     """
     host = urlsplit(url).hostname or "default"
     sess = _get_session()
     last_err: Optional[str] = None
     for attempt in range(MAX_ATTEMPTS):
         _throttle(host)
-        _log.debug("GET %s (attempt %d/%d)", url, attempt + 1, MAX_ATTEMPTS)
+        _log.debug("%s %s (attempt %d/%d)", method, url, attempt + 1, MAX_ATTEMPTS)
         try:
-            resp = sess.get(url, timeout=timeout, headers=headers)
+            if method == "POST":
+                resp = sess.post(url, data=data, timeout=timeout, headers=headers)
+            else:
+                resp = sess.get(url, timeout=timeout, headers=headers)
         except requests.exceptions.SSLError as e:
             raise PanelError(f"TLS 证书校验失败 {url}: {_fmt_exc(e)}；"
                              f"若服务器未发中间证书，把中间证书 PEM 放进 etl/certs/ 后重试")
@@ -286,6 +301,46 @@ def http_get(url: str, *, timeout: float = 30, headers: Optional[Dict[str, str]]
             _log.warning("%s -> %s，%.0fs 后重试", url, last_err, delay)
             time.sleep(delay)
     raise PanelError(f"重试 {MAX_ATTEMPTS} 次仍失败 ({last_err}) {url}")
+
+
+def http_get(url: str, *, timeout: float = 30, headers: Optional[Dict[str, str]] = None
+             ) -> Tuple[bytes, Dict[str, str]]:
+    """GET 一个 URL，返回 (body, headers)。规则见 ``_http``。"""
+    return _http("GET", url, timeout=timeout, headers=headers)
+
+
+def http_post(url: str, *, data: Dict[str, Any], timeout: float = 30, headers: Optional[Dict[str, str]] = None
+              ) -> Tuple[bytes, Dict[str, str]]:
+    """POST 表单 ``data`` 到 URL，返回 (body, headers)。限速 / 重试 / 4xx / TLS 规则与 ``http_get`` 相同。"""
+    return _http("POST", url, timeout=timeout, headers=headers, data=data)
+
+
+# --------------------------------------------------------------------------- 月度缓存
+def _as_sh(now: Optional[datetime]) -> datetime:
+    """None → 当前北京时间；带时区的 datetime 转到北京时间；naive 的原样使用（测试里直接给日期）。"""
+    if now is None:
+        return now_sh()
+    return now.astimezone(TZ) if now.tzinfo is not None else now
+
+
+def monthly_fetch_month(now: Optional[datetime] = None, release_day: int = 1) -> str:
+    """本次抓取应记为哪个月（``YYYY-MM``）：当日 ≥ ``release_day`` 记当月，否则记上月。"""
+    now = _as_sh(now)
+    y, m = now.year, now.month
+    if now.day < release_day:
+        y, m = (y - 1, 12) if m == 1 else (y, m - 1)
+    return f"{y:04d}-{m:02d}"
+
+
+def monthly_refresh_due(fetch_month: Optional[str], now: Optional[datetime] = None, release_day: int = 1) -> bool:
+    """月度源是否该刷新：没抓过 → True；缓存记的月份 ≥ 当月 → False；否则当日 ≥ ``release_day``。"""
+    if not fetch_month:
+        return True
+    now = _as_sh(now)
+    current = f"{now.year:04d}-{now.month:02d}"
+    if str(fetch_month) >= current:
+        return False
+    return now.day >= release_day
 
 
 # --------------------------------------------------------------------------- JSON
