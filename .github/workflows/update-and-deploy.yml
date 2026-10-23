@@ -2,14 +2,23 @@
 #
 # 触发方式：
 #   schedule          每个交易日 20:30 与次日 07:30（北京时间）各更新一次。A 股 15:00 收盘，但各数据源的当日
-#                     数据要到 16:40 之后至次日早上才陆续发布（2026-10-20 实测：中债登 16:40–16:57、乐咕 17:25–17:45、
-#                     中证指数与申万 18:25–18:45；申万按 T+1 口径，有时次日才有），16:40 跑只能拿到 T−1。
-#                     20:30 这次拿当日数据；07:30 这次补申万等发得晚的源，缓存命中后每次只多 2–4 分钟。
+#                     数据要到 16:40 之后才陆续发布（2026-10-20 实测：中债登 16:39–16:57、乐咕 17:25–17:45、
+#                     Baostock 全市场日线 17:30–18:00、中证指数与申万 18:25–18:45，当日即可拿到；申万偶有缺日），
+#                     16:40 跑只能拿到 T−1。20:30 这次拿当日数据；07:30 这次是兜底（补前一晚缺失或失败的源、
+#                     以及 T+1 公布的上交所两融），缓存命中后每次只多 2–4 分钟。
 #   workflow_dispatch 手动运行；可选 only 参数原样传给 etl/build_data.py --only
 #   push main         本地 make update 后 git push，也会重新发布（这种情况只跑 deploy，不再抓数）
 #
 # 两个作业放在同一次运行里是有意的：update 用 GITHUB_TOKEN 推送的数据提交不会再触发新的 workflow 运行，
 # 所以 deploy 必须紧跟在 update 之后、并重新 checkout main 才能拿到刚推送的数据。
+#
+# 全市场日线库（trend / feargreed 面板的底层数据，cache/market/）也放在 actions/cache 里（tail 形态约 20 MB）。
+# 缓存丢失或被淘汰时，etl/market_state.py 先从仓库里的种子 state/market_seed.zip 重建（约 5,500 只股票最近 252 个
+# 交易日的后复权收盘 + 每日聚合 + 交易日历），再用 Baostock 的全市场单日横截面逐日补齐缺的交易日：每个交易日一次
+# 查询（runner 上 25–55 秒），每次运行最多补 ASHARE_MARKET_BUDGET_MIN 分钟（默认 18）；没补完时两个面板照常生成、
+# asOf 停在库的最后一天并在看板说明里提示，下次运行继续。逐只股票抓全史的冷启动从不在这里跑（runner 上 18.2 秒/只，
+# 5,563 只约 28 小时，2026-10-21 实测），只在本地做一次并通过种子提交；update 作业的 timeout-minutes 放宽到 150，
+# 是给「种子重建 + 多日补齐 + 申万全史」同时发生的最坏情况留余量。
 name: update-and-deploy
 
 on:
@@ -40,13 +49,14 @@ jobs:
     # push 事件不抓数，直接发布；手动运行只在 main 上抓数，避免从其它分支把提交推到 main
     if: github.event_name != 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: true
 
-      # cache/ 里的长历史（指数日行情、国债收益率、乐咕 PE）在两次运行之间复用，每天只抓增量。
-      # key 带 run_id 所以每次都会存一份新的，restore-keys 前缀匹配取最近一次。
+      # cache/ 里的长历史（指数日行情、国债收益率、乐咕 PE、申万行业史、全市场日线库 cache/market/）在两次运行之间复用，
+      # 每天只抓增量。key 带 run_id 所以每次都会存一份新的，restore-keys 前缀匹配取最近一次。
       - uses: actions/cache@v4
         with:
           path: cache

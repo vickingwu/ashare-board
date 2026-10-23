@@ -583,6 +583,88 @@ class MiscTest(unittest.TestCase):
                 for p in patches:
                     p.stop()
 
+    def test_cold_start_marks_bad_stock_failed_and_continues(self):
+        """一只股票的解析 / 校验错误（PanelError 而非 BaostockError，如 2026-10-21 sh603856 的日期不递增）只能让这一只进 failed，
+        冷启动继续抓下一只并正常收尾（2026-10-21 run 1 就是因为这里只捕获 BaostockError 而整进程退出）。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fetched = []
+
+            def fake_history(sess, key, start, end):
+                sess.n_queries += 1
+                fetched.append(key)
+                if key == "sz000001":
+                    raise PanelError("Baostock 个股日线日期不是严格递增: 2026-01-28 -> 2025-02-17")
+                return HISTORIES[key]
+
+            def fake_cross(sess, d):
+                sess.n_queries += 1
+                return [{"key": "sh600000", "date": d, "close": 1.0, "preclose": 1.0, "pct": 0.1, "is_st": 0},
+                        {"key": "sz000001", "date": d, "close": 12.0, "preclose": 12.0, "pct": -0.1, "is_st": 0},
+                        {"key": "sz300750", "date": d, "close": 1.0, "preclose": 1.0, "pct": 0.0, "is_st": 0}]
+
+            cal = _weekdays(N_DAYS + 60, end=date(2026, 12, 31))
+            patches = [
+                mock.patch.object(ms, "MARKET_DIR", root),
+                mock.patch.object(ms, "Session", _StubSession),
+                mock.patch.object(ms, "fetch_stock_basic", lambda sess: list(STOCKS)),
+                mock.patch.object(ms, "fetch_history", fake_history),
+                mock.patch.object(ms, "fetch_cross_section", fake_cross),
+                mock.patch.object(ms, "fetch_trade_dates", lambda sess, s, e: [d for d in cal if s <= d <= e]),
+                mock.patch.object(ms, "today_str", lambda: "2026-10-20"),
+                mock.patch.object(ms, "market_closed", lambda now=None: True),
+                mock.patch.object(ms, "MAX_FAILED_SHARE", 0.5),                      # 3 只里坏 1 只；真实阈值 3 % 另有断言
+            ]
+            for p in patches:
+                p.start()
+            try:
+                with self.assertLogs("etl.market", level="WARNING") as cm:
+                    st = ms.cold_start()
+                self.assertEqual(fetched, ["sh600000", "sz000001", "sz300750"])     # 坏股之后继续抓
+                self.assertEqual((st["coldDone"], st["pending"], st["nStocks"], st["lastDate"]), (True, 0, 2, DATES[-1]))
+                self.assertTrue(any("sz000001 抓取失败" in m and "不是严格递增" in m for m in cm.output), cm.output)
+                self.assertTrue(any("1 只抓取失败" in m for m in cm.output), cm.output)
+                m = ms.MarketStore(root).load_manifest()
+                self.assertIsNone(m["codes"]["sz000001"]["n"])                       # 失败股无数据，收尾不为它起链
+                self.assertEqual(m["codes"]["sh600000"]["n"], N_DAYS)
+                self.assertIsNone(ms.MarketStore(root).load_progress())
+            finally:
+                for p in patches:
+                    p.stop()
+            self.assertEqual(ms.MAX_FAILED_SHARE, 0.03)                               # 真实阈值：失败 > 3 % 才整体报错
+
+    def test_cold_start_circuit_breaker_on_failure_streak(self):
+        """连续 MAX_CONSECUTIVE_FAILURES 只失败（疑似断网）→ 这些股票退回 pending 开头、存档、抛 PanelError，而不是全部记 failed。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            many = [{"key": f"sh60{i:04d}", "name": "", "ipo": DATES[0], "out": "", "status": "1"} for i in range(12)]
+
+            def fake_history(sess, key, start, end):
+                raise ms.BaostockError("Baostock query_history_k_data_plus 重试 3 次仍失败: 网络接收错误")
+
+            patches = [
+                mock.patch.object(ms, "MARKET_DIR", root),
+                mock.patch.object(ms, "Session", _StubSession),
+                mock.patch.object(ms, "fetch_stock_basic", lambda sess: list(many)),
+                mock.patch.object(ms, "fetch_history", fake_history),
+                mock.patch.object(ms, "today_str", lambda: "2026-10-20"),
+                mock.patch.object(ms, "market_closed", lambda now=None: True),
+            ]
+            for p in patches:
+                p.start()
+            try:
+                with self.assertLogs("etl.market", level="WARNING"):
+                    with self.assertRaises(PanelError) as err:
+                        ms.cold_start()
+                self.assertIn("连续 10 只失败", str(err.exception))
+                progress = ms.MarketStore(root).load_progress()
+                self.assertEqual(progress["failed"], [])
+                self.assertEqual(len(progress["pending"]), 12)                      # 10 只退回 + 2 只未抓
+                self.assertEqual(progress["pending"][:10], [s["key"] for s in many[:10]])
+            finally:
+                for p in patches:
+                    p.stop()
+
 
 if __name__ == "__main__":
     unittest.main()

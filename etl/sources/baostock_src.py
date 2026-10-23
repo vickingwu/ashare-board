@@ -48,6 +48,7 @@ LOGIN_RETRIES = 3
 QUERY_RETRIES = 3
 RETRY_DELAYS = (2, 4, 8)
 PAGE_SIZE = 2000
+PARSE_RETRIES = 2                           # 个股日线解析失败（翻页重复等）时整个查询重来的次数
 HISTORY_FIELDS = "date,close,preclose,pctChg,tradestatus,isST"
 HISTORY_START = "2004-01-01"
 ADJUST_HFQ = "1"
@@ -323,17 +324,30 @@ def fetch_history(sess: Session, key: str, start: str, end: str) -> List[History
     """一只股票 [start, end] 的后复权日线（已剔除停牌日）。
 
     行数恰为 ``PAGE_SIZE`` 的整数倍时疑似翻页被静默截断，重查一次并取较长的结果。
+    解析失败（典型：重查拿到的结果里某一页重复出现，日期不再严格递增——2026-10-21 sh603856 实测）时整个流程
+    再来一遍，最多 ``PARSE_RETRIES`` 次；仍失败则抛出 PanelError，由调用方决定（冷启动只把这一只记为失败）。
     """
     code = to_bs_code(key)
-    fields, raw = sess.rows("query_history_k_data_plus", code, HISTORY_FIELDS, start_date=start, end_date=end,
-                            frequency="d", adjustflag=ADJUST_HFQ)
-    if raw and len(raw) % PAGE_SIZE == 0:
-        log.warning("Baostock %s 返回 %d 行恰为整页，疑似翻页截断，重查一次", key, len(raw))
-        fields2, raw2 = sess.rows("query_history_k_data_plus", code, HISTORY_FIELDS, start_date=start, end_date=end,
-                                  frequency="d", adjustflag=ADJUST_HFQ)
-        if len(raw2) >= len(raw):
-            fields, raw = fields2, raw2
-    return parse_history_rows(fields, raw)
+    last_err: Optional[PanelError] = None
+    for attempt in range(PARSE_RETRIES):
+        fields, raw = sess.rows("query_history_k_data_plus", code, HISTORY_FIELDS, start_date=start, end_date=end,
+                                frequency="d", adjustflag=ADJUST_HFQ)
+        if raw and len(raw) % PAGE_SIZE == 0:
+            log.warning("Baostock %s 返回 %d 行恰为整页，疑似翻页截断，重查一次", key, len(raw))
+            fields2, raw2 = sess.rows("query_history_k_data_plus", code, HISTORY_FIELDS, start_date=start, end_date=end,
+                                      frequency="d", adjustflag=ADJUST_HFQ)
+            if len(raw2) >= len(raw):
+                fields, raw = fields2, raw2
+        try:
+            return parse_history_rows(fields, raw)
+        except BaostockError:
+            raise
+        except PanelError as e:
+            last_err = e
+            if attempt < PARSE_RETRIES - 1:
+                log.warning("Baostock %s 日线解析失败（%s），%d 行，重查 (%d/%d)", key, e, len(raw), attempt + 2, PARSE_RETRIES)
+    assert last_err is not None
+    raise last_err
 
 
 def fetch_cross_section(sess: Session, date: str) -> List[Dict[str, Any]]:

@@ -285,6 +285,33 @@ class FetchTest(unittest.TestCase):
         self.assertEqual(len(bsrc.fetch_history(sess2, "sh600000", "2004-01-01", "2026-10-21")), 1999)
         self.assertEqual(len(fake2.calls), 1)
 
+    def test_history_retries_once_on_garbled_pages_then_raises(self):
+        """2026-10-21 sh603856 实测：整页重查后拿到的结果里第二页重复出现（日期 2026-01-28 → 2025-02-17 不递增）。
+        fetch_history 应把整个查询再来一遍（PARSE_RETRIES = 2）；第二次正常则返回，两次都坏则抛 PanelError（不是 BaostockError）。"""
+        fields = ["date", "close", "preclose", "pctChg", "tradestatus", "isST"]
+        d0 = date(2017, 1, 3)
+        good = [[(d0 + timedelta(days=i)).isoformat(), "10", "9", "1", "1", "0"] for i in range(2230)]
+        garbled = good[:2000] + good[2000:] + good[2000:]            # 第 2 页出现两次 → 日期回跳
+        # 第 1 次：2000 行整页 → 重查 → 坏结果；第 2 次：2230 行（非整页）→ 正常
+        fake = _FakeBS([_FakeRS(good[:2000], fields), _FakeRS(garbled, fields), _FakeRS(good, fields)])
+        sess = _session_with(fake)
+        with self.assertLogs("etl.baostock", level="WARNING") as cm:
+            out = bsrc.fetch_history(sess, "sh603856", "2004-01-01", "2026-10-21")
+        self.assertEqual(len(out), 2230)
+        self.assertEqual(len(fake.calls), 3)
+        self.assertTrue(any("解析失败" in m for m in cm.output), cm.output)
+        self.assertEqual(sess.n_relogins, 0)                           # 解析失败不触发重新登录
+        # 两次都坏 → PanelError 向上抛（冷启动只把这一只记为失败）
+        fake2 = _FakeBS([_FakeRS(garbled, fields), _FakeRS(garbled, fields)])
+        sess2 = _session_with(fake2)
+        with self.assertLogs("etl.baostock", level="WARNING"):
+            with self.assertRaises(PanelError) as err:
+                bsrc.fetch_history(sess2, "sh603856", "2004-01-01", "2026-10-21")
+        self.assertNotIsInstance(err.exception, bsrc.BaostockError)
+        self.assertIn("不是严格递增", str(err.exception))
+        self.assertEqual(len(fake2.calls), 2)
+        self.assertEqual(bsrc.PARSE_RETRIES, 2)
+
     def test_trade_dates_and_cross_section(self):
         td = _fx("bs_trade_dates_tail.json")
         cs = _fx("bs_daily_AStock_20261020_trim.json")

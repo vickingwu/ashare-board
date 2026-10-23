@@ -509,7 +509,9 @@ def cold_start(budget_min: Optional[float] = None, limit: Optional[int] = None, 
             key = pending[0]
             try:
                 rows = fetch_history(sess, key, HISTORY_START, today)
-            except BaostockError as e:
+            except PanelError as e:
+                # BaostockError（重试后仍失败）以及解析 / 校验错误（例如翻页重复导致日期不递增）都只算这一只失败：
+                # 记入 failed、继续下一只；日增量会在横截面里从原始收盘为它起链。绝不能让单只股票的坏数据杀掉整个冷启动。
                 log.warning("冷启动 %s 抓取失败: %s", key, e)
                 progress["failed"].append(key)
                 pending.pop(0)
