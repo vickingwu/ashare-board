@@ -8,7 +8,7 @@
   --accent: #1F5FBF;
   --up: #D64541;     /* 涨：红 */
   --down: #1E9E5A;   /* 跌：绿 */
-  --header-h: 64px;
+  --header-h: 64px;  /* 单行导航时的顶栏高度（兜底值）；js/app.js 启动后按顶栏实际高度改写，导航折行时随之变大 */
   /* 七个指数颜色由 js/app.js 在启动时写入 --idx-000300 … --idx-uncovered */
 }
 

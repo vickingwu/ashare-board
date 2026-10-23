@@ -323,9 +323,32 @@
     });
   }
 
+  // ---------------------------------------------------------------- 顶栏高度
+  // 顶栏是 sticky 的，锚点 / 深链接靠 html 的 scroll-padding-top: calc(var(--header-h) + 8px) 避开它。样式表里的 --header-h
+  // 是单行导航时的高度（64px，窄屏 84px）；面板增多后导航在 1200px 宽度内折成两行（窄屏更多行），顶栏实际更高，
+  // 不刷新这个变量的话定位后面板标题会被顶栏盖住。这里按实际高度写回变量，并在顶栏尺寸变化（缩放、换行数变化）时重算。
+  function syncHeaderHeight() {
+    var header = document.querySelector('.site-header');
+    if (!header) return;
+    var h = Math.ceil(header.getBoundingClientRect().height);
+    if (h > 0) document.documentElement.style.setProperty('--header-h', h + 'px');
+  }
+
+  function watchHeaderHeight() {
+    var header = document.querySelector('.site-header');
+    if (!header) return;
+    if ('ResizeObserver' in window) {
+      new ResizeObserver(syncHeaderHeight).observe(header);
+    } else {
+      window.addEventListener('resize', debounce(syncHeaderHeight, 100));
+    }
+  }
+
   // ---------------------------------------------------------------- 启动
   function init() {
     buildShell();
+    syncHeaderHeight();
+    watchHeaderHeight();
     loadManifest();
 
     // 懒加载：进入视口前 600px 开始取数
@@ -367,6 +390,7 @@
       var above = registry.slice(0, idx + 1).map(function (p) { return loadPanel(p.id); });
       Promise.all(above).then(function () {
         requestAnimationFrame(function () {
+          syncHeaderHeight();
           byId[targetId].el.scrollIntoView({ block: 'start', behavior: 'instant' });
           setTimeout(enableSmooth, 150);
         });
