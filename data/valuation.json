@@ -1,7 +1,7 @@
 {
  "panel": "valuation",
  "title": "主要宽基指数估值分位",
- "generated": "2026-10-24T01:21:55+08:00",
+ "generated": "2026-10-24T09:50:05+08:00",
  "asOf": "2026-10-23",
  "sources": [
   "乐咕乐股 legulegu.com（指数整体法滚动市盈率，月度）",
@@ -14,9 +14,9 @@
   "月末样本不足 60 个的指数标「样本短」：中证2000（PE 自 2023-06）、中证A500（自 2024-09）、科创50 分位的参考意义有限。",
   "沪深300 / 中证500 / 中证1000 / 中证800 / 上证50 的 PE 来自乐咕乐股（最早 2005-04 起）；中证全指、红利低波、科创50、中证2000、中证A500 来自中证指数官网日行情（2011 年中以后才有值）。两个来源的计算细节不同（乐咕约低 4–10%），同一指数只用一个来源，不混接。",
   "分位低只说明当前 PE 相对自身历史偏低，盈利下滑时 PE 会被动抬高，解读时要结合盈利趋势。",
-  "科创50：PE 历史不可用，未纳入（PanelError: HTTP 403 https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000688&startDate=20261022&endDate=20261024）",
-  "中证2000：PE 历史不可用，未纳入（PanelError: HTTP 403 https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=932000&startDate=20261022&endDate=20261024）",
-  "中证A500：PE 历史不可用，未纳入（PanelError: HTTP 403 https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000510&startDate=20261022&endDate=20261024）"
+  "科创50：PE 历史不可用，未纳入（PanelError: 重试 5 次仍失败 (ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))) https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000688&startDa）",
+  "中证2000：PE 历史不可用，未纳入（PanelError: 重试 5 次仍失败 (ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))) https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=932000&startDa）",
+  "中证A500：PE 历史不可用，未纳入（PanelError: 重试 5 次仍失败 (ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))) https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000510&startDa）"
  ],
  "data": {
   "indexes": [
