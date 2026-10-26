@@ -159,6 +159,9 @@ class ThresholdAndFlagsTest(unittest.TestCase):
         self.assertEqual(ms.limit_threshold("600519", "2026-10-20", False), 9.8)
         self.assertEqual(ms.limit_threshold("600519", "2026-10-20", True), 4.8)
         self.assertEqual(ms.limit_threshold("000001", "2015-07-08", False), 9.8)
+        self.assertEqual(ms.limit_threshold("689009", "2021-01-04", False), 19.8)      # 科创板 CDR 与 688 同为 20 %
+        self.assertEqual(ms.limit_threshold("689009", "2020-11-05", True), 19.8)
+        self.assertEqual(ms.STAR_PREFIXES, ("688", "689"))
         self.assertEqual(ms.CYB_20PCT_FROM, "2020-08-24")
         self.assertEqual(ms.LIMIT_TOL, 0.2)
 
@@ -304,8 +307,87 @@ class RebuildTest(unittest.TestCase):
                   "limitUp": 0, "limitDown": 0, "nLimitEligible": 2}
         self.assertEqual(counters, expect)
         self.assertEqual({k: agg[k][-1] for k in ms.AGG_KEYS}, expect)
-        with self.assertRaises(PanelError):                                        # 同一天不能写两次
-            ms.apply_day(self.store, NEXT_DAY, rows[:1], manifest, agg)
+        # 幂等：同一天再写一次（上次运行被打断后续跑）→ 不报错、不追加、聚合里这一天只有一份、清单不变、日志提到复用
+        before = json.dumps(manifest, sort_keys=True, default=str)
+        with self.assertLogs("etl.market", level="INFO") as cm:
+            counters2 = ms.apply_day(self.store, NEXT_DAY, rows, manifest, agg)
+        self.assertTrue(any("复用 3 行" in m for m in cm.output), cm.output)
+        self.assertEqual(counters2, expect)
+        self.assertEqual(agg["dates"].count(NEXT_DAY), 1)
+        self.assertEqual(len(agg["dates"]), N_DAYS + 1)
+        self.assertEqual({k: agg[k][-1] for k in ms.AGG_KEYS}, expect)
+        self.assertEqual(len(self.store.read_stock("sh600000").dates), N_DAYS + 1)
+        self.assertEqual(len(self.store.read_stock("sh601001").dates), 1)
+        after = json.loads(json.dumps(manifest, sort_keys=True, default=str))
+        before_d = json.loads(before)
+        after.pop("updatedAt")
+        before_d.pop("updatedAt")
+        self.assertEqual(after, before_d)
+        # 更早的一天仍然不能写（清单 last > d）
+        with self.assertRaises(PanelError):
+            ms.apply_day(self.store, DATES[-1], rows[:1], manifest, agg)
+
+    def test_apply_day_resumes_after_interrupted_run(self):
+        """模拟中断：股票文件已写了 d 这一行，但清单 / 聚合还是前一天 → 重跑复用那一行，续链结果与一次写完相同。"""
+        agg = ms.rebuild_agg(self.store)
+        manifest = self.store.load_manifest()
+        rows = [
+            {"key": "sh600000", "date": NEXT_DAY, "close": 13.0, "preclose": 12.9, "pct": 1.0, "is_st": 0},
+            {"key": "sz000001", "date": NEXT_DAY, "close": 70.0, "preclose": 71.4, "pct": -2.0, "is_st": 1},
+        ]
+        last_a = manifest["codes"]["sh600000"]["lastClose"]
+        # 「上次运行」只写完了甲的文件就死掉：清单与聚合没动
+        self.store.append_rows("sh600000", [(ms.date_int(NEXT_DAY), last_a * 1.01, 1.0, 0)])
+        with self.assertLogs("etl.market", level="INFO") as cm:
+            counters = ms.apply_day(self.store, NEXT_DAY, rows, manifest, agg)
+        self.assertTrue(any("复用 1 行" in m for m in cm.output), cm.output)
+        self.assertEqual(counters["nTraded"], 2)
+        a = manifest["codes"]["sh600000"]
+        self.assertEqual((a["last"], a["n"]), (NEXT_DAY, N_DAYS + 1))
+        self.assertAlmostEqual(a["lastClose"], last_a * 1.01, delta=1e-9)
+        self.assertEqual(len(self.store.read_stock("sh600000").dates), N_DAYS + 1)
+        self.assertEqual(len(self.store.read_stock("sz000001").dates), N_DAYS)        # 乙缺一天停牌 + 新的一天
+        self.assertEqual(agg["dates"][-1], NEXT_DAY)
+        self.assertEqual(agg["dates"].count(NEXT_DAY), 1)
+        self.assertEqual(manifest["lastDate"], NEXT_DAY)
+
+    def test_apply_day_rejects_mismatching_stored_row(self):
+        """文件里已有 d 的行但收盘与重算不一致（不是同一条链的产物）→ PanelError，而不是悄悄复用。"""
+        agg = ms.rebuild_agg(self.store)
+        manifest = self.store.load_manifest()
+        rows = [{"key": "sh600000", "date": NEXT_DAY, "close": 13.0, "preclose": 12.9, "pct": 1.0, "is_st": 0}]
+        self.store.append_rows("sh600000", [(ms.date_int(NEXT_DAY), 999.0, 1.0, 0)])
+        with self.assertRaises(PanelError) as cm:
+            ms.apply_day(self.store, NEXT_DAY, rows, manifest, agg)
+        self.assertIn("已有行与重算不一致", str(cm.exception))
+
+    def test_agg_set_day(self):
+        agg = ms.empty_agg()
+        c1 = {k: 1 for k in ms.AGG_KEYS}
+        c2 = {k: 2 for k in ms.AGG_KEYS}
+        self.assertFalse(ms.agg_set_day(agg, "2026-10-20", c1))
+        self.assertTrue(ms.agg_set_day(agg, "2026-10-20", c2))                       # 同一天 → 替换
+        self.assertEqual((agg["dates"], agg["adv"]), (["2026-10-20"], [2]))
+        self.assertFalse(ms.agg_set_day(agg, "2026-10-21", c1))
+        self.assertEqual(agg["adv"], [2, 1])
+        with self.assertRaises(PanelError):
+            ms.agg_set_day(agg, "2026-10-20", c1)                                      # 早于最后一天
+
+    def test_star_board_689_threshold_in_rebuild(self):
+        """689xxx（科创板 CDR）与 688 同为 ±20 %：合成一只 689 股票的 +12 % 日不计涨停。"""
+        manifest = self.store.load_manifest()
+        rows = [(d, 100.0 + i, 12.0 if i == 20 else 0.5, 0) for i, d in enumerate(DATES[:30])]
+        ms._store_history(self.store, manifest, "sh689009", rows)
+        self.store.save_manifest(manifest)
+        agg = ms.rebuild_agg(self.store)
+        i20 = 20
+        self.assertEqual(agg["limitUp"][i20], 0)
+        self.assertEqual(agg["nLimitEligible"][i20], 3)                               # 甲、乙、689 三只 ≥ 5 行
+        self.assertEqual(sum(agg["limitUp"]), 1)                                       # 只有甲第 150 日
+        # 对照：同样的序列换成主板代码就是一次涨停
+        ms._store_history(self.store, manifest, "sh600100", rows)
+        agg2 = ms.rebuild_agg(self.store)
+        self.assertEqual(agg2["limitUp"][i20], 1)
 
 
 class IncrementalTest(unittest.TestCase):
@@ -412,6 +494,38 @@ class IncrementalTest(unittest.TestCase):
         self.assertEqual(self.fetched, ["2026-10-21"])
         self.assertEqual(res["updated"], ["2026-10-21"])
 
+    def test_skip_days_env_skips_listed_past_day_only(self):
+        """ASHARE_MARKET_SKIP_DAYS 列出的缺失交易日不向 Baostock 查询、记入 skippedDays；其它缺失日照常处理；今天不会被跳过。"""
+        self.cross["2026-10-21"] = []                                                 # 这一天 Baostock 永远没有数据
+        env = {ms.ENV_SKIP_DAYS: " 2026-10-21 , 2026-10-23,2026-10-21"}
+        with mock.patch.dict("os.environ", env), self.assertLogs("etl.market", level="WARNING") as cm:
+            res = self._run()
+        self.assertEqual(self.fetched, ["2026-10-22", "2026-10-23"])                 # 10-21 没查；10-23 = 今天不跳过
+        self.assertEqual(res["skipped"], ["2026-10-21"])
+        self.assertEqual(res["updated"], ["2026-10-22"])
+        self.assertTrue(any("跳过 2026-10-21" in m for m in cm.output), cm.output)
+        manifest = self.store.load_manifest()
+        self.assertEqual(manifest["skippedDays"], ["2026-10-21"])
+        self.assertEqual(manifest["lastDate"], "2026-10-22")
+        agg = self.store.load_agg()
+        self.assertEqual(agg["dates"][-1], "2026-10-22")
+        self.assertNotIn("2026-10-21", agg["dates"])
+        self.assertEqual(self.store.read_stock("sh600000").dates[-1], 20261022)
+        self.assertEqual(ms.skip_days_from_env(), [])                                 # 环境变量已还原
+        with mock.patch.dict("os.environ", {ms.ENV_SKIP_DAYS: "20261021"}):
+            with self.assertRaises(PanelError):
+                ms.skip_days_from_env()
+
+    def test_skip_days_env_only_missing_day_makes_no_connection(self):
+        """唯一缺失的一天就是要跳过的那天 → 记入 skippedDays、推进 lastDate，不开 Baostock 会话。"""
+        with mock.patch.dict("os.environ", {ms.ENV_SKIP_DAYS: "2026-10-21"}), \
+                self.assertLogs("etl.market", level="WARNING"):
+            res = self._run(today="2026-10-22", closed=False)
+        self.assertEqual(self.fetched, [])
+        self.assertEqual(len(_StubSession.instances), 0)
+        self.assertEqual((res["skipped"], res["updated"], res["lastDate"]), (["2026-10-21"], [], "2026-10-21"))
+        self.assertEqual(self.store.load_manifest()["skippedDays"], ["2026-10-21"])
+
     def test_cold_in_progress_or_missing_store(self):
         self.store.save_progress({"done": 25, "total": 5563, "pending": ["x"] * 5538, "failed": []})
         manifest = self.store.load_manifest()
@@ -476,6 +590,31 @@ class SeedTest(unittest.TestCase):
             store, _ = _make_store(Path(tmp), cold_done=False)
             with self.assertRaises(PanelError):
                 ms.export_seed(Path(tmp) / "s.zip", store=store)
+
+    def test_export_rejects_tail_store(self):
+        """从种子解出的 tail 库（每只只有最近 252 行）不能再导出成「full 来源」的种子。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            store, manifest = _make_store(Path(tmp))
+            manifest["kind"] = "tail"
+            store.save_manifest(manifest)
+            with self.assertRaises(PanelError) as cm:
+                ms.export_seed(Path(tmp) / "s.zip", store=store)
+            self.assertIn("full 形态", str(cm.exception))
+            self.assertIn("kind=tail", str(cm.exception))
+            self.assertFalse((Path(tmp) / "s.zip").exists())
+
+    def test_cold_start_rejects_tail_store(self):
+        """库是种子 tail 形态时 make market-cold 不能悄悄变成空操作，也不能在 tail 库上建全史：先 make clean-cache-market。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            store, manifest = _make_store(Path(tmp))
+            manifest["kind"] = "tail"
+            store.save_manifest(manifest)
+            with mock.patch.object(ms, "MARKET_DIR", Path(tmp)), \
+                    mock.patch.object(ms, "Session", lambda: self.fail("tail 库上不应打开 Baostock 会话")):
+                with self.assertRaises(PanelError) as cm:
+                    ms.cold_start()
+            self.assertIn("tail", str(cm.exception))
+            self.assertIn("clean-cache-market", str(cm.exception))
 
 
 class MiscTest(unittest.TestCase):

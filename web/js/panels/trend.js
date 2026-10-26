@@ -86,15 +86,20 @@
       var date = tsToDate((p || params[0]).axisValue);
       if (!date) return '';
       var i = lastIndexOnOrBefore(daily.dates, date);
-      if (i < 0) return '';
-      var day = daily.dates[i];
+      // 日度序列从 2005-01 起、月度柱从 2000-03 起：指针落在日度序列之前时只能给出月度 / 行业数据，日度三项显示 –
+      var day = i >= 0 ? daily.dates[i] : date;
       var m = lastIndexOnOrBefore(monthly.dates, day);
+      if (i < 0 && m < 0) return '';
       var di = C.firstIndexOnOrAfter(ind.dates, day);
       var hasDaily = di >= 0 && ind.dates[di] === day;
-      var html = '<b>' + day + '</b><br>' +
-        NAMES.pct250 + ' ' + fmt.pct(daily.pct250[i], 1) + '（' + fmt.num(daily.above250[i]) + ' / ' + fmt.num(daily.n[i]) + ' 只）<br>' +
-        NAMES.pct50 + ' ' + fmt.pct(daily.pct50[i], 1) + '<br>' +
-        NAMES.csi + ' ' + fmt.num(csi[i], 2);
+      var html = '<b>' + day + '</b><br>';
+      if (i >= 0) {
+        html += NAMES.pct250 + ' ' + fmt.pct(daily.pct250[i], 1) + '（' + fmt.num(daily.above250[i]) + ' / ' + fmt.num(daily.n[i]) + ' 只）<br>' +
+          NAMES.pct50 + ' ' + fmt.pct(daily.pct50[i], 1) + '<br>' +
+          NAMES.csi + ' ' + fmt.num(csi[i], 2);
+      } else {
+        html += NAMES.pct250 + ' –<br>' + NAMES.pct50 + ' –<br>' + NAMES.csi + ' –';
+      }
       if (m >= 0) {
         html += '<br>行业 MACD>0 ' + fmt.pct(monthly.pctIndustryMacdPos[m], 1) + '（柱>0 ' + fmt.pct(monthly.pctHist[m], 1) +
           '，' + monthly.nIndustries[m] + ' 个行业，月度 ' + monthly.dates[m] + '）';
@@ -182,7 +187,10 @@
     if (!echarts) throw new Error('ECharts 未加载（vendor/echarts.min.js）');
     var daily = d.daily;
     var lastDate = daily.dates[daily.dates.length - 1];
-    var state = { range: DEFAULT_RANGE, start: null, showDaily: false, selected: null };
+    // 「全部」窗的起点：两个序列里更早的那个首日（月度柱 2000-03 早于日度 2005-01）。显式写进两个横轴的 min，
+    // 否则各网格按自己的数据自适应，上下两图的横轴对不齐
+    var allStart = d.monthly.dates[0] < daily.dates[0] ? d.monthly.dates[0] : daily.dates[0];
+    var state = { range: DEFAULT_RANGE, start: allStart, showDaily: false, selected: null };
 
     C.rangeButtons(body, RANGES.map(function (r) { return r.label; }), DEFAULT_RANGE, pick);
     body.appendChild(readout(d, ctx));
@@ -206,7 +214,7 @@
     function applyRange(i) {
       var years = RANGES[i].years;
       state.range = i;
-      state.start = years === null ? null : C.windowStartDate(lastDate, years);
+      state.start = years === null ? allStart : C.windowStartDate(lastDate, years);
       state.showDaily = years !== null && years <= DAILY_MAX_YEARS;
     }
 

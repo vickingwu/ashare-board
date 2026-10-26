@@ -88,6 +88,38 @@
    "error": null,
    "durationSec": 0.2,
    "static": false
+  },
+  "growth": {
+   "ok": true,
+   "asOf": "2026-09-30",
+   "generated": "2026-10-23T17:19:36+08:00",
+   "error": null,
+   "durationSec": 9.3,
+   "static": false
+  },
+  "factors": {
+   "ok": true,
+   "asOf": "2026-10-23",
+   "generated": "2026-10-26T11:26:36+08:00",
+   "error": null,
+   "durationSec": 21.7,
+   "static": false
+  },
+  "fundroll": {
+   "ok": true,
+   "asOf": "2026-10-23",
+   "generated": "2026-10-26T11:30:26+08:00",
+   "error": null,
+   "durationSec": 229.5,
+   "static": false
+  },
+  "investors": {
+   "ok": true,
+   "asOf": "2026-10-23",
+   "generated": "2026-10-26T11:30:36+08:00",
+   "error": null,
+   "durationSec": 1.2,
+   "static": false
   }
  }
 }

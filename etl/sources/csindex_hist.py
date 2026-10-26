@@ -24,21 +24,27 @@
 ``cache_is_fresh`` 规则不重复请求。历史上合并进缓存的假日占位行用
 ``python -m etl.sources.csindex_hist --purge-dates 2026-10-01`` 一次性清掉。
 
-限流（2026-10-23 观察）：2 秒间隔下连续 16 个全史请求（约 45 秒）在第 16 个收到 HTTP 403，几分钟后自愈；
-结合 10-21 的「8 秒 12 个 → 403」，实际上限约每分钟 15 个请求。对策：主机最小间隔 3 秒
-（``common.HOST_MIN_INTERVAL``），且 ``_request`` 在 ``http_get`` 抛出 ``HTTP 403`` 时暂停 ``RATE_LIMIT_SLEEP``
-（90 秒）后**只重试一次**；``http_get`` 本身仍保持「4xx 不重试」。
+限流与封禁（2026-10-21 / 10-23 / 10-24 观察）：2 秒间隔下连续 16 个全史请求（约 45 秒）在第 16 个收到 HTTP 403，
+几分钟后自愈；结合 10-21 的「8 秒 12 个 → 403」，实际上限约每分钟 15 个请求。10-23 runner 上 12 个小请求之后
+隔 76 秒的第 13 个起连续 403；10-24 早上 runner 从第一个请求起连续 15 次 ``Connection reset by peer``——
+这已经是 IP 级封禁，``http_get`` 默认的 2 → 16 秒短退避无济于事。对策：
+* 主机最小间隔 3 ± 1 秒（``common.HOST_MIN_INTERVAL`` / ``HOST_JITTER``）；
+* ``_request`` 以 ``max_attempts=1`` 调 ``http_get``（自己管重试），遇到 403 / 429 / 5xx / 连接重置 / 超时按
+  ``RATE_LIMIT_BACKOFF``（30 → 60 → 120 → 240 秒）长退避再试，共 5 次；其它 4xx（如 404）与 TLS 错误立即抛出；
+* 熔断：一条序列把退避用完仍失败，之后 ``CIRCUIT_OPEN_SEC`` 秒内本进程对中证的请求直接抛 PanelError（「暂不可达」），
+  不再逐条等 7 分多钟；编排器的第二轮（``build_data.py`` 全部面板跑完后暂停 60 秒再试网络类失败的面板）正好落在
+  熔断期之外，再给一次完整的退避机会。
 """
 from __future__ import annotations
 
 import json
 import logging
 import time
-from typing import Any, Collection, Dict, List, Optional, Tuple
+from typing import Any, Collection, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import urlencode
 
 from etl import common, compute
-from etl.common import (PanelError, cache_is_fresh, cache_load, cache_save, http_get, iso_now,
+from etl.common import (PanelError, cache_is_fresh, cache_load, cache_save, http_get, is_network_error, iso_now,
                         market_closed, today_compact, today_str)
 
 log = logging.getLogger("etl.csindex_hist")
@@ -48,8 +54,11 @@ HEADERS = {"Referer": "https://www.csindex.com.cn/", "Accept": "application/json
 FULL_START = "20050101"
 CACHE_SUB = "csindex_hist"
 TIMEOUT = 60
-# 突发限流（HTTP 403）后的暂停秒数，之后只重试一次；测试里打成 0
-RATE_LIMIT_SLEEP = 90
+# 限流 / 连接重置后的长退避（秒）：第 1 次失败后等 30 s，再失败等 60 s …，共 len+1 = 5 次尝试；测试里打成 ()
+RATE_LIMIT_BACKOFF: Sequence[float] = (30, 60, 120, 240)
+# 一条序列把退避用完仍失败 → 这么多秒内本进程不再请求中证（直接抛「暂不可达」）
+CIRCUIT_OPEN_SEC = 60.0
+_circuit_open_until: Optional[float] = None
 
 Row = Tuple[str, float, Optional[float]]   # (YYYY-MM-DD, close, pe|None)
 
@@ -111,16 +120,41 @@ def parse_perf(body: bytes, start: Optional[str] = None, known_dates: Collection
     return {"code": code, "name": name, "nameFull": name_full, "rows": rows}
 
 
+def reset_circuit() -> None:
+    """关闭熔断（测试与编排器的第二轮用）。"""
+    global _circuit_open_until
+    _circuit_open_until = None
+
+
+def _fetch_with_backoff(code: str, url: str) -> bytes:
+    """按 RATE_LIMIT_BACKOFF 长退避请求一条中证序列；网络 / 限流类错误用完退避仍失败则打开熔断并抛出。"""
+    global _circuit_open_until
+    now = time.monotonic()
+    if _circuit_open_until is not None and now < _circuit_open_until:
+        raise PanelError(f"csindex {code}: 中证指数官网暂不可达（熔断中，{_circuit_open_until - now:.0f} s 后恢复尝试）{url}")
+    attempts = len(RATE_LIMIT_BACKOFF) + 1
+    for i in range(attempts):
+        try:
+            body, _hdr = http_get(url, timeout=TIMEOUT, headers=HEADERS, max_attempts=1)
+            _circuit_open_until = None
+            return body
+        except PanelError as e:
+            if not is_network_error(str(e)):
+                raise                                   # 404 之类的 4xx、TLS：重试无益
+            if i >= attempts - 1:
+                _circuit_open_until = time.monotonic() + CIRCUIT_OPEN_SEC
+                log.error("csindex %s: 限流 / 连接重置，%d 次尝试仍失败，%.0f s 内不再请求中证: %s", code, attempts,
+                          CIRCUIT_OPEN_SEC, e)
+                raise
+            pause = RATE_LIMIT_BACKOFF[i]
+            log.warning("csindex %s: %s（限流或封禁），%.0f s 后第 %d/%d 次重试", code, str(e)[:120], pause, i + 2, attempts)
+            time.sleep(pause)
+    raise AssertionError("unreachable")
+
+
 def _request(code: str, start: str, end: str, known_dates: Collection[str] = ()) -> Dict[str, Any]:
     url = PERF_URL + "?" + urlencode({"indexCode": code, "startDate": start, "endDate": end})
-    try:
-        body, _hdr = http_get(url, timeout=TIMEOUT, headers=HEADERS)
-    except PanelError as e:
-        if "HTTP 403" not in str(e):
-            raise
-        log.warning("csindex %s: HTTP 403（突发限流），%d s 后重试一次", code, RATE_LIMIT_SLEEP)
-        time.sleep(RATE_LIMIT_SLEEP)
-        body, _hdr = http_get(url, timeout=TIMEOUT, headers=HEADERS)
+    body = _fetch_with_backoff(code, url)
     parsed = parse_perf(body, start=start, known_dates=known_dates)
     log.debug("csindex perf %s %s-%s: %d 字节，%d 行", code, start, end, len(body), len(parsed["rows"]))
     return parsed

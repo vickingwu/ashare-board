@@ -1,6 +1,6 @@
 # A股看板 —— macOS 常用命令（需要 python3 ≥ 3.11，见 setup；Windows 请直接用 .venv\Scripts\python.exe 运行同名脚本）
 .PHONY: setup update update-only test serve site clean-cache clean-cache-quotes clean-cache-sws \
-        market-cold market-rebuild market-seed market-status clean-cache-market
+        market-cold market-rebuild market-seed market-status clean-cache-market gold-seed
 
 PY := .venv/bin/python
 
@@ -41,6 +41,10 @@ clean-cache-sws:
 # ---- 全市场日线库 cache/market/（trend / feargreed 两个面板的底层数据，Baostock 沪深 A 股后复权日线）----
 # 冷启动：逐只抓 2004 年起的全史，约 5,500 只、本机约 9–12 小时（随时可 Ctrl-C，重跑同一命令从 cache/market/progress.json 续传）。
 # 只在重建全史 / 刷新种子时需要：日常 make update 在库不存在时自动从 state/market_seed.zip 初始化并逐日补齐，不会触发冷启动。
+# 前提：cache/market/ 不存在或是 full 形态——从种子解出的 tail 库（每只只有最近 252 行）上不能冷启动，会报错要求先 make clean-cache-market；
+# market-seed 同样只接受 full 库。
+# 结束时用最近几天的横截面校验并补齐早抓的股票：校验窗口默认是最后日期往前 10 个日历日，冷启动跨度超过 10 天时调大
+# （ASHARE_MARKET_PATCH_DAYS=20 make market-cold），否则日志会 WARNING「N 只股票最后日期早于校验窗口」。
 # 运行期间不要同时跑 make update（两个 Baostock 会话会互相干扰）
 market-cold:
 	$(PY) -m etl.market_state --cold --verbose
@@ -60,3 +64,9 @@ market-status:
 # 删掉全市场日线库：下次 make update 从种子重建并补齐缺的交易日（1–3 分钟）；不碰其它缓存
 clean-cache-market:
 	rm -rf cache/market
+
+# ---- 金价静态种子 state/gold_seed.json（growth 面板 2006-01 → 2016-11 的月均人民币金价）----
+# 世界银行月均美元金价 × 中国货币网 USD/CNY 中间价月均 ÷ 31.1034768，按与上金所重叠期的几何均值 k 拼接；约 21 次请求、25 秒。
+# 只在重建种子时需要（日常 make update 只读种子、只抓上金所）；跑完核对输出的 k 在 0.98–1.05 之间，再 git add state/gold_seed.json 提交
+gold-seed:
+	$(PY) -m etl.sources.gold_history --build-seed

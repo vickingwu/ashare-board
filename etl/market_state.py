@@ -24,21 +24,26 @@
   停牌多日后复牌同样成立（停牌日没有收益）；
 * 聚合按「当日有行的股票」统计：``n250/above250`` 要求含当日 ≥ 250 行（MA250 = 最近 250 行后复权收盘均值，
   above = 收盘 > MA250），``n50/above50`` 同理 50；``adv/dec/flat`` 按 pctChg 正负零，股票的第一行不计
-  （其 pctChg 是相对发行价）；涨跌停需 ≥ 5 行：688 ±19.8，30 开头 2020-08-24 起 ±19.8（含 ST）、之前 ±9.8/ST ±4.8，
-  60/00 开头 ±9.8/ST ±4.8——阈值已含 0.2 个百分点容差以吸收价格最小变动单位的四舍五入（2.5 元以下的低价股
-  可能四舍五入到阈值以下，属已知偏差）。``pct250 = above250 / n250 × 100``。
+  （其 pctChg 是相对发行价）；涨跌停需 ≥ 5 行：688/689（科创板，含 CDR）±19.8，30 开头 2020-08-24 起 ±19.8（含 ST）、
+  之前 ±9.8/ST ±4.8，60/00 开头 ±9.8/ST ±4.8——阈值已含 0.2 个百分点容差以吸收价格最小变动单位的四舍五入
+  （2.5 元以下的低价股可能四舍五入到阈值以下，属已知偏差）。``pct250 = above250 / n250 × 100``。
 
 运行规则：
 * Baostock 单会话、顺序查询；冷启动可随时杀掉，``progress.json`` 每 20 只存档，重跑同一命令即续跑；
   绝不同时跑两个冷启动，也不要在它运行时跑别的 Baostock 任务（``--rebuild`` 与 ``ASHARE_MARKET_ALLOW_PARTIAL=1``
-  的面板构建不联网，安全）；
+  的面板构建不联网，安全）；已有 ``kind == "tail"``（种子解出）的库上不能冷启动，先 ``make clean-cache-market``；
 * 冷启动收尾（``finalize_cold``）：跨越 18:00 发布时刻或跨天的运行会让早抓的股票少一两天，用最后几天的横截面
   对比已存的最后一行（一致率需 ≥ 99 %）并把差的天补上，然后重算聚合、置 ``coldDone``、删 ``progress.json``；
+  校验窗口 = 最后日期往前 ``ASHARE_MARKET_PATCH_DAYS`` 个日历日（默认 10）：冷启动跨度超过它时把它调大，否则早抓的
+  股票在窗口之外的那些天不会被补上（日志会 WARNING 这类股票的数量）；
 * 日增量（``update_incremental``）：先用缓存日历算缺失交易日，缺失为空且日历够用时**不连 Baostock**；
-  当天 0 行 = 尚未发布（正常停止）；过去某天 0 行 → PanelError（下次重试或 ``--skip-day``）；
-  行数不足前一日 70 % → PanelError；每天存档一次；预算用尽 → ``lagging``（面板照常出图并提示落后）；
+  当天 0 行 = 尚未发布（正常停止）；过去某天 0 行 → PanelError（下次重试或 ``--skip-day``；Actions 上用环境变量
+  ``ASHARE_MARKET_SKIP_DAYS=YYYY-MM-DD[,YYYY-MM-DD]`` 跳过这些天）；行数不足前一日 70 % → PanelError；每天存档一次；
+  预算用尽 → ``lagging``（面板照常出图并提示落后）；
+* 写一天是幂等的（``apply_day`` / ``finalize_cold``）：上次运行在写完部分股票文件之后、存清单之前被打断时，重跑会发现
+  股票文件最后一行已经是这一天，复用它（收盘与重算一致，容差 1e-3）而不是再追加；聚合里同一天只保留一份；
 * ``skip_day`` 把某天记入 ``skippedDays`` 并推进 ``lastDate``：那一天的收益从每只股票的链里永久缺失（已记录的漂移）；
-* ``rebuild_agg`` 只读股票文件、只写 ``agg.json``，不碰清单，冷启动运行期间也可以跑。
+* ``rebuild_agg`` 只读股票文件、只写 ``agg.json``，不碰清单，冷启动运行期间也可以跑；``export_seed`` 只接受 full 库。
 """
 from __future__ import annotations
 
@@ -93,15 +98,19 @@ ENV_BUDGET = "ASHARE_MARKET_BUDGET_MIN"
 ENV_ALLOW_PARTIAL = "ASHARE_MARKET_ALLOW_PARTIAL"
 MAX_SEED_BYTES = 15 * 1024 * 1024
 MIN_SEED_STOCKS = 5000
-PATCH_LOOKBACK_DAYS = 10
+PATCH_LOOKBACK_DAYS = 10            # finalize_cold 校验窗口（日历日）的默认值，可用 ASHARE_MARKET_PATCH_DAYS 覆盖
+ENV_PATCH_DAYS = "ASHARE_MARKET_PATCH_DAYS"
+ENV_SKIP_DAYS = "ASHARE_MARKET_SKIP_DAYS"
 MAX_UNEQUAL_SHARE = 0.01
 PCT_COMPARE_TOL = 1e-4
+ROW_REUSE_TOL = 1e-3                # 复用已写入的当日行时，库里 float32 收盘与重算 float64 收盘的相对容差
 MAX_CONSECUTIVE_FAILURES = 10
 
 # 涨跌停阈值（已扣 LIMIT_TOL = 0.2 个百分点容差）：主板 10 %、ST 5 %、科创/创业板（2020-08-24 起）20 %
 LIMIT_MAIN = 9.8
 LIMIT_ST = 4.8
 LIMIT_20 = 19.8
+STAR_PREFIXES = ("688", "689")      # 科创板：688 普通股 + 689 CDR（如 689009），均为 ±20 %
 
 AGG_KEYS = ("nTraded", "n250", "above250", "n50", "above50", "adv", "dec", "flat", "limitUp", "limitDown",
             "nLimitEligible")
@@ -191,9 +200,9 @@ def prev_trading_day(cal: Sequence[str], d: str) -> Optional[str]:
 def limit_threshold(code6: str, date: str, is_st: bool) -> float:
     """涨跌停判定阈值（%，已含 0.2 个百分点容差）。
 
-    688xxx → 19.8；30xxxx → 2020-08-24 起 19.8（含 ST），之前 9.8 / ST 4.8；其它（60/00）→ 9.8 / ST 4.8。
+    688xxx / 689xxx（科创板，含 CDR）→ 19.8；30xxxx → 2020-08-24 起 19.8（含 ST），之前 9.8 / ST 4.8；其它（60/00）→ 9.8 / ST 4.8。
     """
-    if code6.startswith("688"):
+    if code6.startswith(STAR_PREFIXES):
         return LIMIT_20
     if code6.startswith("30") and date >= CYB_20PCT_FROM:
         return LIMIT_20
@@ -256,6 +265,16 @@ def agg_append(agg: Dict[str, list], date: str, counters: Dict[str, int]) -> Non
         agg[k].append(int(counters.get(k, 0)))
 
 
+def agg_set_day(agg: Dict[str, list], date: str, counters: Dict[str, int]) -> bool:
+    """写入某天的计数：最后一天已是 ``date`` 时原地替换（续跑被打断的那一天），否则追加；早于最后一天抛 PanelError。返回是否替换。"""
+    if agg["dates"] and date == agg["dates"][-1]:
+        for k in AGG_KEYS:
+            agg[k][-1] = int(counters.get(k, 0))
+        return True
+    agg_append(agg, date, counters)
+    return False
+
+
 def agg_from_counters(by_date: Dict[str, Dict[str, int]]) -> Dict[str, list]:
     agg = empty_agg()
     for d in sorted(by_date):
@@ -298,9 +317,13 @@ class MarketStore:
         tmp.write_bytes(pack_series(series.dates, series.close, series.pct, series.flags))
         os.replace(tmp, p)
 
-    def append_rows(self, key: str, rows: Sequence[Tuple[int, float, float, int]]) -> StockSeries:
-        """追加 ``(date_int, close, pct, flag)`` 行（日期必须大于已有最后一行），返回更新后的序列。"""
-        s = self.read_stock(key)
+    def append_rows(self, key: str, rows: Sequence[Tuple[int, float, float, int]],
+                    series: Optional[StockSeries] = None) -> StockSeries:
+        """追加 ``(date_int, close, pct, flag)`` 行（日期必须大于已有最后一行），返回更新后的序列。
+
+        ``series`` 是调用方刚读出的当前序列（省一次读盘）；不给则这里读。
+        """
+        s = series if series is not None else self.read_stock(key)
         dates = array("i", s.dates)
         close = array("f", s.close)
         pct = array("f", s.pct)
@@ -471,6 +494,8 @@ def cold_start(budget_min: Optional[float] = None, limit: Optional[int] = None, 
     store = MarketStore()
     store.ensure_dirs()
     manifest = store.load_manifest()
+    if manifest and manifest.get("kind") == "tail":
+        raise PanelError("当前库是种子 tail 形态，冷启动会与之冲突：先 make clean-cache-market")
     if manifest and manifest.get("coldDone"):
         log.info("冷启动已完成（截至 %s），无需重复", manifest.get("lastDate"))
         return store.status()
@@ -565,20 +590,22 @@ def finalize_cold(store: MarketStore, sess: Session, manifest: Optional[Dict[str
     if not lasts:
         raise PanelError("冷启动收尾：没有任何股票数据")
     last_date = max(lasts)
-    cutoff = shift_days(last_date, -PATCH_LOOKBACK_DAYS)
+    lookback = env_int(ENV_PATCH_DAYS, PATCH_LOOKBACK_DAYS)
+    cutoff = shift_days(last_date, -lookback)
     recent = [d for d in lasts if d >= cutoff]
     first_patch = min(recent)
     stale = [k for k, c in codes.items() if c.get("last") and c["last"] < cutoff and not (c.get("out") or "")]
     if stale:
-        log.warning("冷启动收尾：%d 只在册股票的最后日期早于 %s（长期停牌），复牌出现在横截面时按停牌续链，例: %s",
-                    len(stale), cutoff, stale[:10])
+        log.warning("冷启动收尾：%d 只股票最后日期早于校验窗口 %s（长期停牌或冷启动跨度大于 %d 天）；复牌出现在横截面时"
+                    "按停牌续链，跨多天的冷启动请设置 %s，例: %s", len(stale), cutoff, lookback, ENV_PATCH_DAYS, stale[:10])
     patch_days = [d for d in cal if first_patch < d <= last_date]
-    log.info("冷启动收尾：最后日期 %s，最早待补 %s，校验/补齐 %d 个交易日", last_date, first_patch, len(patch_days))
+    log.info("冷启动收尾：最后日期 %s，最早待补 %s，校验窗口 %d 天，校验/补齐 %d 个交易日", last_date, first_patch, lookback,
+             len(patch_days))
     # 每只股票的全史都抓到了至少 first_patch（最早一次抓取时 Baostock 已发布到那天），而 (first_patch, d) 的每个
     # 交易日都在这里按序处理过：某股在那些天不在横截面里 = 停牌，所以 last < d 的股票一律可以按链补上 d。
     for d in patch_days:
         rows = fetch_cross_section(sess, d)
-        n_eq = n_ne = n_patch = 0
+        n_eq = n_ne = n_patch = n_reused = 0
         di = date_int(d)
         for r in rows:
             e = codes.get(r["key"])
@@ -592,13 +619,15 @@ def finalize_cold(store: MarketStore, sess: Session, manifest: Optional[Dict[str
                     n_ne += 1
             elif e["last"] < d:
                 hfq = float(e["lastClose"]) * (1.0 + r["pct"] / 100.0)
-                series = store.append_rows(r["key"], [(di, hfq, r["pct"], r["is_st"])])
+                series, reused = _append_or_reuse(store, r["key"], d, di, hfq, r)
                 e["last"] = d
                 e["n"] = len(series.dates)
                 e["lastClose"] = hfq
                 n_patch += 1
+                n_reused += reused
         compared = n_eq + n_ne
-        log.info("冷启动校验 %s：对比 %d 一致 %d 不一致，补齐 %d 只", d, compared, n_ne, n_patch)
+        log.info("冷启动校验 %s：对比 %d 一致 %d 不一致，补齐 %d 只%s", d, compared, n_ne, n_patch,
+                 f"（复用 {n_reused} 行）" if n_reused else "")
         if compared and n_ne > MAX_UNEQUAL_SHARE * compared:
             store.save_manifest(manifest)
             raise PanelError(f"冷启动校验 {d}：{n_ne}/{compared} 只的最后一行与横截面不一致（> 1%），请检查")
@@ -618,7 +647,7 @@ def finalize_cold(store: MarketStore, sess: Session, manifest: Optional[Dict[str
 def _accumulate_series(by_date: Dict[int, List[int]], code6: str, dates: Sequence[int], close: Sequence[float],
                        pct: Sequence[float], flags: Sequence[int]) -> None:
     """一只股票全部行 → 累加到 ``by_date[date_int] = [11 个计数]``（与 ``stock_day_flags`` 同口径，滚动和 O(n)）。"""
-    is_688 = code6.startswith("688")
+    is_688 = code6.startswith(STAR_PREFIXES)
     is_30 = code6.startswith("30")
     cyb_from = date_int(CYB_20PCT_FROM)
     sum_long = 0.0
@@ -698,12 +727,33 @@ def rebuild_agg(store: MarketStore, manifest: Optional[Dict[str, Any]] = None) -
 
 
 # --------------------------------------------------------------------------- 日增量
+def _append_or_reuse(store: MarketStore, key: str, d: str, di: int, hfq: float, r: Dict[str, Any]
+                     ) -> Tuple[StockSeries, int]:
+    """把 d 这一行写进 key 的文件；文件最后一行已经是 d（上次运行被打断）时不再追加而是复用它。
+
+    复用前校验库里的收盘与重算的 ``hfq`` 相对差 ≤ ROW_REUSE_TOL（float32 存储 vs float64 重算），不一致抛 PanelError
+    ——同一天同一只股票从同一个 lastClose 续链，结果必须相同。返回 ``(序列, 复用 0/1)``。
+    """
+    series = store.read_stock(key)
+    if len(series.dates) and series.dates[-1] == di:
+        stored = float(series.close[-1])
+        if abs(stored - hfq) / abs(hfq) > ROW_REUSE_TOL:
+            raise PanelError(f"{key} {d} 已有行与重算不一致：库 {stored:.6g} vs 重算 {hfq:.6g}")
+        return series, 1
+    return store.append_rows(key, [(di, hfq, r["pct"], r["is_st"])], series=series), 0
+
+
 def apply_day(store: MarketStore, d: str, rows: Sequence[Dict[str, Any]], manifest: Dict[str, Any],
               agg: Dict[str, list]) -> Dict[str, int]:
-    """把一天的横截面写进库：续链/起链、追加行、算当日计数、``agg_append``、``manifest.lastDate = d``。不落盘清单/聚合。"""
+    """把一天的横截面写进库：续链/起链、追加行、算当日计数、``agg_set_day``、``manifest.lastDate``。不落盘清单/聚合。
+
+    幂等：股票文件里已有 d 这一行（上次运行写了一部分就被打断）→ 复用；清单里 ``last == d`` → 视为已写入，只重算
+    计数不再改 n / lastClose；聚合里 d 已是最后一天 → 替换计数。``last > d`` 仍是错误。
+    """
     codes = manifest["codes"]
     di = date_int(d)
     counters: Dict[str, int] = {k: 0 for k in AGG_KEYS}
+    reused = 0
     for r in rows:
         key = r["key"]
         e = codes.get(key)
@@ -716,11 +766,14 @@ def apply_day(store: MarketStore, d: str, rows: Sequence[Dict[str, Any]], manife
                 e["status"] = e.get("status") or "1"
                 e["ipo"] = e.get("ipo") or d
             hfq = float(r["close"])
+        elif e.get("last") == d:
+            hfq = float(e["lastClose"])                      # 清单已记到 d：lastClose 就是 d 的后复权收盘
         else:
-            if e.get("last") and e["last"] >= d:
+            if e.get("last") and e["last"] > d:
                 raise PanelError(f"{key} 已有 {e['last']} 的行，不能再写 {d}")
             hfq = float(e["lastClose"]) * (1.0 + float(r["pct"]) / 100.0)
-        series = store.append_rows(key, [(di, hfq, r["pct"], r["is_st"])])
+        series, re = _append_or_reuse(store, key, d, di, hfq, r)
+        reused += re
         n_rows = len(series.dates)
         e["first"] = e.get("first") or d
         e["last"] = d
@@ -729,8 +782,10 @@ def apply_day(store: MarketStore, d: str, rows: Sequence[Dict[str, Any]], manife
         tail = series.close[-MA_LONG:]
         fl = stock_day_flags(tail, float(series.pct[-1]), bool(series.flags[-1] & 1), n_rows, key[-6:], d)
         add_flags(counters, fl)
-    agg_append(agg, d, counters)
-    manifest["lastDate"] = d
+    replaced = agg_set_day(agg, d, counters)
+    if reused or replaced:
+        log.info("全市场 %s: 上次运行中断后续跑，复用 %d 行%s", d, reused, "，聚合当日计数已替换" if replaced else "")
+    manifest["lastDate"] = max(manifest.get("lastDate") or "", d)
     manifest["nStocks"] = _count_stocks(manifest)
     manifest["updatedAt"] = iso_now()
     return counters
@@ -753,7 +808,25 @@ def budget_from_env() -> float:
     return float(env_int(ENV_BUDGET, DEFAULT_BUDGET_MIN))
 
 
+def skip_days_from_env() -> List[str]:
+    """``ASHARE_MARKET_SKIP_DAYS``（逗号分隔的 ``YYYY-MM-DD``，可有空格）→ 升序去重列表；格式不对抛 PanelError。"""
+    raw = os.environ.get(ENV_SKIP_DAYS) or ""
+    out = set()
+    for part in raw.split(","):
+        p = part.strip()
+        if p:
+            date_int(p)
+            out.add(p)
+    return sorted(out)
+
+
 _UPDATE_RESULT: Optional[Tuple[Optional[Dict[str, Any]], Optional[PanelError]]] = None
+
+
+def reset_update_memo() -> None:
+    """忘掉本进程里 ``update_incremental`` 的结果 / 错误，让下一次调用重新连 Baostock（编排器第二轮用）。"""
+    global _UPDATE_RESULT
+    _UPDATE_RESULT = None
 
 
 def update_incremental(budget_min: float = DEFAULT_BUDGET_MIN) -> Dict[str, Any]:
@@ -794,14 +867,37 @@ def _update_incremental(budget_min: float) -> Dict[str, Any]:
     def missing_days(cal: Sequence[str]) -> List[str]:
         return [d for d in cal if last_date < d <= today and (d < today or closed)]
 
+    skip = skip_days_from_env()
+    result: Dict[str, Any] = {"updated": [], "skipped": [], "lagging": False, "lastDate": last_date, "today": today,
+                              "nQueries": 0, "seconds": 0.0}
+
+    def is_skip(d: str) -> bool:
+        return d in skip and d < today
+
+    def record_skip(d: str) -> None:
+        # 与 skip_day 相同的语义，只是作用在内存里的清单上：记入 skippedDays、推进 lastDate、落盘；不向 Baostock 要这一天
+        skipped = manifest.setdefault("skippedDays", [])
+        if d not in skipped:
+            skipped.append(d)
+            skipped.sort()
+        if not manifest.get("lastDate") or d > manifest["lastDate"]:
+            manifest["lastDate"] = d
+        manifest["updatedAt"] = iso_now()
+        store.save_manifest(manifest)
+        if d not in result["skipped"]:
+            result["skipped"].append(d)
+            log.warning("按 %s 跳过 %s：不向 Baostock 查询，该日收益不进入任何股票的后复权链（skippedDays=%s）",
+                        ENV_SKIP_DAYS, d, skipped)
+
     cal_obj = store.load_calendar() or {}
     cal: List[str] = list(cal_obj.get("dates") or [])
     missing = missing_days(cal)
     need_cal = not cal or cal[-1] < shift_days(today, CALENDAR_MIN_AHEAD_DAYS)
-    result: Dict[str, Any] = {"updated": [], "lagging": False, "lastDate": last_date, "today": today,
-                              "nQueries": 0, "seconds": 0.0}
-    if not missing and not need_cal:
-        log.info("全市场日线库已是最新（截至 %s），不连接 Baostock", last_date)
+    if not [d for d in missing if not is_skip(d)] and not need_cal:
+        for d in missing:
+            record_skip(d)
+        log.info("全市场日线库已是最新（截至 %s），不连接 Baostock", manifest.get("lastDate") or last_date)
+        result["lastDate"] = manifest.get("lastDate")
         result["seconds"] = round(_monotonic() - t0, 1)
         return result
     agg = store.load_agg()
@@ -812,9 +908,12 @@ def _update_incremental(budget_min: float) -> Dict[str, Any]:
             log.info("全市场日线库截至 %s，缺 %d 个交易日%s", last_date, len(missing),
                      f"（{missing[0]} → {missing[-1]}）" if missing else "")
             for d in missing:
+                if is_skip(d):
+                    record_skip(d)
+                    continue
                 if _monotonic() >= deadline:
                     result["lagging"] = True
-                    remaining = len(missing) - len(result["updated"])
+                    remaining = len(missing) - len(result["updated"]) - len([x for x in missing if is_skip(x)])
                     log.warning("预算 %.0f 分钟用尽，还差 %d 个交易日，下次运行继续补齐", budget_min, remaining)
                     break
                 rows = fetch_cross_section(sess, d)
@@ -851,6 +950,8 @@ def export_seed(path: Path = SEED_PATH, tail_rows: int = TAIL_ROWS, store: Optio
     manifest = store.load_manifest()
     if not manifest or not manifest.get("coldDone"):
         raise PanelError("冷启动未完成（coldDone=false），不能导出种子")
+    if manifest.get("kind") != "full":
+        raise PanelError(f"只能从 full 形态的库导出种子（当前 kind={manifest.get('kind')}）：先 make clean-cache-market && make market-cold")
     if store.load_progress() is not None:
         raise PanelError("progress.json 仍存在，冷启动尚未收尾")
     path = Path(path)

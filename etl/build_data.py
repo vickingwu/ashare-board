@@ -11,6 +11,11 @@
 * 面板模块导出 PANEL_ID / TITLE / 可选 STATIC / build() -> {asOf, sources, notes, data}
 * 面板可导出 COMPACT_JSON = True，输出不缩进，用于大文件（默认 indent=1）
 * 任一面板失败不影响其它面板；失败面板的旧 JSON 保留，manifest 里 ok=false + error
+* 第二轮：全部面板跑完后，对因网络 / 限流类错误（``common.is_network_error``：连接重置、超时、HTTP 403 / 429 / 5xx、
+  重试耗尽、Baostock 网络错误、熔断）失败的面板暂停 SECOND_PASS_PAUSE（60 秒）后再构建一次，之后才写 manifest——
+  一段短暂的坏网络不至于让一个面板整天停在旧数据（2026-10-24 runner 上 widebase 就是这样丢了一天）
+* 无变化不改写：新产出除 ``generated`` 外与现有文件完全相同时不重写文件（``generated`` 沿用旧值），manifest 也只在
+  任一面板条目变化时才写——周末 / 节假日的暖缓存空跑于是不产生任何文件改动，Actions 上「没有可提交的变化」
 * 退出码：0 至少一个面板成功；1 全部失败；2 参数错误
 * 自测钩子：环境变量 ASHARE_FORCE_FAIL=coverage[,loss] 强制对应面板抛错（不发请求）
 """
@@ -26,8 +31,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from etl.common import DATA_DIR, _fmt_exc, get_logger, iso_now, read_json, write_json_atomic  # noqa: E402
+from etl.common import (DATA_DIR, _fmt_exc, get_logger, is_network_error, iso_now, read_json,  # noqa: E402
+                        write_json_atomic)
 import etl.panels  # noqa: E402
+
+SECOND_PASS_PAUSE = 60.0            # 第二轮前的暂停（秒）；测试里打成 0
+MANIFEST_COMPARE_KEYS = ("ok", "asOf", "generated", "error", "static")   # durationSec 不算变化
 
 
 def discover_panels():
@@ -39,6 +48,40 @@ def discover_panels():
         if hasattr(mod, "PANEL_ID") and hasattr(mod, "build"):
             mods.append(mod)
     return mods
+
+
+def unchanged_except_generated(prev, new) -> bool:
+    """现有文件与新产出除 ``generated`` 外是否完全相同（JSON 值级比较）。``prev`` 不是合法外壳时为 False。"""
+    if not isinstance(prev, dict) or not isinstance(prev.get("generated"), str):
+        return False
+    a = {k: v for k, v in prev.items() if k != "generated"}
+    b = {k: v for k, v in new.items() if k != "generated"}
+    return a == b
+
+
+def manifest_entries_changed(old_entries, new_entries) -> bool:
+    """两份 manifest.panels 在 MANIFEST_COMPARE_KEYS 上是否有差别（面板集合不同也算变化）。"""
+    old_entries = old_entries or {}
+    if set(old_entries) != set(new_entries):
+        return True
+    for pid, e in new_entries.items():
+        o = old_entries.get(pid) or {}
+        if any(o.get(k) != e.get(k) for k in MANIFEST_COMPARE_KEYS):
+            return True
+    return False
+
+
+def retry_candidates(panels, entries):
+    """第一轮之后值得再试一次的面板：失败且错误文本属于网络 / 限流类。"""
+    return [m for m in panels if not entries[m.PANEL_ID]["ok"] and is_network_error(entries[m.PANEL_ID]["error"])]
+
+
+def reset_for_second_pass():
+    """清掉进程内记住的「本次已失败」状态，让第二轮真的重试：全市场日线库的增量记忆、中证熔断。"""
+    from etl import market_state
+    from etl.sources import csindex_hist
+    market_state.reset_update_memo()
+    csindex_hist.reset_circuit()
 
 
 def build_one(mod, logger):
@@ -60,9 +103,16 @@ def build_one(mod, logger):
             "notes": list(res.get("notes", [])),
             "data": res["data"],
         }
-        write_json_atomic(out_path, envelope, compact=bool(getattr(mod, "COMPACT_JSON", False)))
-        dur = round(time.monotonic() - t0, 1)
-        logger.info("面板 %s 完成，asOf=%s，%.1fs", pid, envelope["asOf"], dur)
+        prev = read_json(out_path, default=None)
+        if unchanged_except_generated(prev, envelope):
+            envelope["generated"] = prev["generated"]
+            dur = round(time.monotonic() - t0, 1)
+            logger.info("面板 %s 完成，asOf=%s，与现有文件无差别（沿用 generated=%s），%.1fs", pid, envelope["asOf"],
+                        envelope["generated"], dur)
+        else:
+            write_json_atomic(out_path, envelope, compact=bool(getattr(mod, "COMPACT_JSON", False)))
+            dur = round(time.monotonic() - t0, 1)
+            logger.info("面板 %s 完成，asOf=%s，%.1fs", pid, envelope["asOf"], dur)
         return {"ok": True, "asOf": envelope["asOf"], "generated": envelope["generated"],
                 "error": None, "durationSec": dur, "static": static}
     except Exception as e:  # noqa: BLE001 — 面板级隔离，任何异常都不能拖垮其它面板
@@ -94,10 +144,22 @@ def main(argv=None) -> int:
     t_all = time.monotonic()
     manifest_path = DATA_DIR / "manifest.json"
     manifest = read_json(manifest_path, default=None) or {}
-    entries = dict(manifest.get("panels") or {})
+    old_entries = dict(manifest.get("panels") or {})
+    entries = dict(old_entries)
     for mod in panels:
         entries[mod.PANEL_ID] = build_one(mod, logger)
-    write_json_atomic(manifest_path, {"generated": iso_now(), "panels": entries})
+    retry = retry_candidates(panels, entries)
+    if retry:
+        logger.warning("第二轮：%d 个面板因网络 / 限流错误失败（%s），%.0f s 后再试一次", len(retry),
+                       ", ".join(m.PANEL_ID for m in retry), SECOND_PASS_PAUSE)
+        time.sleep(SECOND_PASS_PAUSE)
+        reset_for_second_pass()
+        for mod in retry:
+            entries[mod.PANEL_ID] = build_one(mod, logger)
+    if manifest_entries_changed(old_entries, entries):
+        write_json_atomic(manifest_path, {"generated": iso_now(), "panels": entries})
+    else:
+        logger.info("manifest 无变化（%d 个面板的产出都与现有文件相同），不改写", len(panels))
 
     print()
     print(f"{'panel':<10} | {'ok':<5} | {'asOf':<10} | {'seconds':>7} | error")

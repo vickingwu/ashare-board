@@ -204,6 +204,68 @@ class HttpGetTest(unittest.TestCase):
         for host in ("datacenter-web.eastmoney.com", "www.sge.com.cn", "www.chinamoney.com.cn", "thedocs.worldbank.org"):
             self.assertGreaterEqual(common.HOST_MIN_INTERVAL[host], 1.0)
 
+    # ---- M4 carry-over：中证间隔抖动、max_attempts=1、网络类错误判定
+    def test_csindex_gap_has_plus_minus_one_second_jitter(self):
+        self.assertEqual(common.HOST_JITTER["www.csindex.com.cn"], 1.0)
+        with mock.patch.object(common.random, "uniform", lambda a, b: a):          # 最小
+            self.assertAlmostEqual(common.throttle_gap("www.csindex.com.cn"), 2.0)
+        with mock.patch.object(common.random, "uniform", lambda a, b: b):          # 最大
+            self.assertAlmostEqual(common.throttle_gap("www.csindex.com.cn"), 4.0)
+        seen = {common.throttle_gap("www.csindex.com.cn") for _ in range(50)}
+        self.assertTrue(all(2.0 <= g <= 4.0 for g in seen))
+        self.assertGreater(len(seen), 5)                                            # 真的在抖
+        self.assertEqual(common.throttle_gap("qt.gtimg.cn"), 0.3)                    # 其它主机无抖动
+        # 实际限速：两次中证请求之间 sleep 了抖动后的间隔
+        clock, sess, patches = self._patched([_Resp(200), _Resp(200)])
+        patches.append(mock.patch.object(common.random, "uniform", lambda a, b: 0.5))
+        for p in patches:
+            p.start()
+        try:
+            common.http_get("https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000300")
+            common.http_get("https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=H00300")
+        finally:
+            for p in reversed(patches):
+                p.stop()
+        self.assertEqual(clock.sleeps, [3.5])
+
+    def test_max_attempts_one_disables_inner_retry(self):
+        clock, sess, patches = self._patched([_Resp(503), _Resp(200)])
+        for p in patches:
+            p.start()
+        try:
+            with self.assertRaises(PanelError) as ctx:
+                common.http_get(self.CSI.format(1), max_attempts=1)
+        finally:
+            for p in reversed(patches):
+                p.stop()
+        self.assertIn("重试 1 次仍失败", str(ctx.exception))
+        self.assertIn("HTTP 503", str(ctx.exception))
+        self.assertEqual(len(sess.calls), 1)
+        self.assertEqual(clock.sleeps, [])
+
+    def test_is_network_error(self):
+        yes = [
+            "PanelError: HTTP 403 https://www.csindex.com.cn/x",
+            "PanelError: 重试 5 次仍失败 (ConnectionError: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))) https://x",
+            "PanelError: 重试 1 次仍失败 (HTTP 502) https://x",
+            "HTTP 429 https://x",
+            "ReadTimeout: HTTPSConnectionPool(host='x', port=443): Read timed out.",
+            "PanelError: Baostock login 重试 3 次仍失败: 网络接收错误",
+            "PanelError: csindex 000300: 中证指数官网暂不可达（熔断中）",
+        ]
+        no = [
+            "PanelError: HTTP 404 https://x",
+            "PanelError: csindex perf 不是 JSON: ValueError",
+            "PanelError: 申万一级行业应为 31 个，拿到 30 个",
+            "PanelError: TLS 证书校验失败 https://x",
+            "KeyError: 'close'",
+            None, "",
+        ]
+        for m in yes:
+            self.assertTrue(common.is_network_error(m), m)
+        for m in no:
+            self.assertFalse(common.is_network_error(m), m)
+
     def test_real_session_uses_browser_user_agent(self):
         with mock.patch.object(common, "_session", None):
             sess = common._get_session()

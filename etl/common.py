@@ -4,7 +4,11 @@
 设计约束（见 README「数据源与口径」）：
 * 单线程、单并发：所有 HTTP 请求都经过 ``http_get`` / ``http_post``（共用 ``_http`` 核心），按主机维护最小间隔；
   ``http_post`` 以表单（``application/x-www-form-urlencoded``）提交 ``data``，限速、重试、4xx、TLS 规则与 GET 完全一致；
-* 指数退避重试：5 次，2s → 4s → 8s → 16s（上限 60s）；
+* 指数退避重试：5 次，2s → 4s → 8s → 16s（上限 60s）；``max_attempts`` 可由调用方收紧（中证日行情只试 1 次，
+  由 ``csindex_hist`` 自己按 30 → 60 → 120 → 240 秒的长退避重试，并带熔断）；
+* 主机间隔可带抖动（``HOST_JITTER``）：中证 3 ± 1 秒，避免等间隔的请求串被当成脚本流量；
+* ``is_network_error(msg)`` 判断一条错误文本是不是网络 / 限流类（连接重置、超时、HTTP 403 / 429 / 5xx、重试耗尽、
+  Baostock 网络错误、熔断），编排器据此在全部面板跑完后对这类失败的面板再试一轮；
 * 失败只影响当前面板：抛 ``PanelError`` 或任何异常，由编排器隔离；
 * 写文件一律先写 ``*.json.tmp`` 再 ``os.replace``，前端永远读不到半截文件；
 * 长历史数据源（指数日行情、PE、国债收益率）的缓存按「当天 16:00 前/后」判断能否复用
@@ -29,6 +33,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
+import re
 import sys
 import time
 from datetime import datetime
@@ -61,7 +67,9 @@ USER_AGENT = (
 # 乐咕与中债登是单页面站点，放慢到 1 秒。
 # 中证指数官网 index-perf 接口对短时突发限流：2026-10-21 本机与 GitHub runner 都是 8 秒内 12 个小增量请求通过后，
 # 之后的请求连续 HTTP 403，几分钟后自愈；2026-10-23 又观察到 2 秒间隔下 16 个全史请求（约 45 秒）在第 16 个触发 403，
-# 实际上限约每分钟 15 个请求。放慢到 3 秒，26 条序列约 80–90 秒；csindex_hist 另对 403 做一次 90 秒暂停后重试。
+# 实际上限约每分钟 15 个请求。放慢到 3 秒（± 1 秒抖动，见 HOST_JITTER），26 条序列约 80–90 秒；csindex_hist 另对
+# 403 / 连接重置做 30 → 60 → 120 → 240 秒的长退避重试（2026-10-24 runner 上观察到第一个请求起连续 15 次
+# Connection reset by peer，是 IP 级封禁而非突发限流，2–16 秒的短退避无济于事）。
 # 东方财富数据中心、上海黄金交易所、中国货币网、世界银行文档站都是单页面接口，统一 1 秒。
 HOST_MIN_INTERVAL: Dict[str, float] = {
     "default": 0.5,
@@ -78,14 +86,31 @@ HOST_MIN_INTERVAL: Dict[str, float] = {
     "www.chinamoney.com.cn": 1.0,
     "thedocs.worldbank.org": 1.0,
 }
+# 主机间隔的随机抖动（秒，均匀分布 ±）：实际间隔 ∈ [gap − jitter, gap + jitter]
+HOST_JITTER: Dict[str, float] = {
+    "www.csindex.com.cn": 1.0,
+}
 MAX_ATTEMPTS = 5
 BACKOFF_CAP = 60.0
 # A 股收盘后的整点；在此之前抓到的「当天」数据视为盘中值
 MARKET_CLOSE_HOUR = 16
 
+# 网络 / 限流类错误文本的特征（见 is_network_error）：这些失败值得在全部面板跑完后再试一轮
+_NETWORK_ERROR_RE = re.compile(
+    r"重试 \d+ 次仍失败|HTTP (?:403|429|5\d\d)\b|Connection(?:Error|ResetError|RefusedError| aborted| reset)|"
+    r"Timeout|timed out|RemoteDisconnected|网络接收错误|服务器连接失败|暂不可达|熔断|ReadTimeout|ConnectTimeout")
+
 
 class PanelError(Exception):
     """面板级别的可预期失败（数据源格式变化、校验不过等）。"""
+
+
+def is_network_error(msg: Optional[str]) -> bool:
+    """错误文本是否属于网络 / 限流类（连接重置、超时、HTTP 403 / 429 / 5xx、重试耗尽、Baostock 网络错误、熔断）。
+
+    用于编排器的第二轮：数据源格式变化、校验不过之类的错误再跑一遍结果不会变，只有这一类值得稍后重试。
+    """
+    return bool(msg) and _NETWORK_ERROR_RE.search(str(msg)) is not None
 
 
 # --------------------------------------------------------------------------- 环境变量
@@ -255,9 +280,18 @@ def _get_session() -> requests.Session:
     return _session
 
 
-def _throttle(host: str) -> None:
-    """阻塞到距该主机上一次请求至少 HOST_MIN_INTERVAL 秒。"""
+def throttle_gap(host: str) -> float:
+    """本次请求与该主机上一次请求之间应隔多少秒：HOST_MIN_INTERVAL ± HOST_JITTER（均匀抖动，不小于 0）。"""
     gap = HOST_MIN_INTERVAL.get(host, HOST_MIN_INTERVAL["default"])
+    jitter = HOST_JITTER.get(host, 0.0)
+    if jitter > 0:
+        gap = max(0.0, gap + random.uniform(-jitter, jitter))
+    return gap
+
+
+def _throttle(host: str) -> None:
+    """阻塞到距该主机上一次请求至少 ``throttle_gap(host)`` 秒。"""
+    gap = throttle_gap(host)
     last = _last_request_at.get(host)
     if last is not None:
         wait = gap - (time.monotonic() - last)
@@ -267,18 +301,20 @@ def _throttle(host: str) -> None:
 
 
 def _http(method: str, url: str, *, timeout: float, headers: Optional[Dict[str, str]],
-          data: Optional[Dict[str, Any]] = None) -> Tuple[bytes, Dict[str, str]]:
+          data: Optional[Dict[str, Any]] = None, max_attempts: Optional[int] = None) -> Tuple[bytes, Dict[str, str]]:
     """GET / POST 共用核心：单并发 + 主机限速 + 指数退避，返回 (body, headers)。
 
     429/5xx/网络错误重试；其它 4xx 立即抛 PanelError；TLS 证书校验失败不重试、立即抛 PanelError
-    （证书问题不会在 16 秒内自愈）。POST 时 ``data`` 作为表单体提交。
+    （证书问题不会在 16 秒内自愈）。POST 时 ``data`` 作为表单体提交。``max_attempts`` 默认 MAX_ATTEMPTS，
+    调用方自己管重试时传 1。
     """
     host = urlsplit(url).hostname or "default"
     sess = _get_session()
     last_err: Optional[str] = None
-    for attempt in range(MAX_ATTEMPTS):
+    attempts = MAX_ATTEMPTS if max_attempts is None else max(1, int(max_attempts))
+    for attempt in range(attempts):
         _throttle(host)
-        _log.debug("%s %s (attempt %d/%d)", method, url, attempt + 1, MAX_ATTEMPTS)
+        _log.debug("%s %s (attempt %d/%d)", method, url, attempt + 1, attempts)
         try:
             if method == "POST":
                 resp = sess.post(url, data=data, timeout=timeout, headers=headers)
@@ -296,17 +332,17 @@ def _http(method: str, url: str, *, timeout: float, headers: Optional[Dict[str, 
                 last_err = f"HTTP {resp.status_code}"
             else:
                 raise PanelError(f"HTTP {resp.status_code} {url}")
-        if attempt < MAX_ATTEMPTS - 1:
+        if attempt < attempts - 1:
             delay = min(BACKOFF_CAP, 2.0 * (2 ** attempt))
             _log.warning("%s -> %s，%.0fs 后重试", url, last_err, delay)
             time.sleep(delay)
-    raise PanelError(f"重试 {MAX_ATTEMPTS} 次仍失败 ({last_err}) {url}")
+    raise PanelError(f"重试 {attempts} 次仍失败 ({last_err}) {url}")
 
 
-def http_get(url: str, *, timeout: float = 30, headers: Optional[Dict[str, str]] = None
-             ) -> Tuple[bytes, Dict[str, str]]:
+def http_get(url: str, *, timeout: float = 30, headers: Optional[Dict[str, str]] = None,
+             max_attempts: Optional[int] = None) -> Tuple[bytes, Dict[str, str]]:
     """GET 一个 URL，返回 (body, headers)。规则见 ``_http``。"""
-    return _http("GET", url, timeout=timeout, headers=headers)
+    return _http("GET", url, timeout=timeout, headers=headers, max_attempts=max_attempts)
 
 
 def http_post(url: str, *, data: Dict[str, Any], timeout: float = 30, headers: Optional[Dict[str, str]] = None

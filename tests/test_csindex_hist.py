@@ -230,28 +230,96 @@ class GetHistoryTest(unittest.TestCase):
 
 
 class RateLimitRetryTest(unittest.TestCase):
-    """HTTP 403（突发限流）→ 暂停 RATE_LIMIT_SLEEP 后只重试一次；其它 4xx 直接抛出。"""
+    """HTTP 403 / 连接重置 → 按 RATE_LIMIT_BACKOFF（30 → 60 → 120 → 240 s）长退避重试，共 5 次；其它 4xx 直接抛出；
+    用完退避仍失败 → 熔断 CIRCUIT_OPEN_SEC 秒。"""
 
-    def test_403_pauses_once_then_retries(self):
+    def setUp(self):
+        csindex_hist.reset_circuit()
+
+    def tearDown(self):
+        csindex_hist.reset_circuit()
+
+    def test_backoff_schedule_constants(self):
+        self.assertEqual(tuple(csindex_hist.RATE_LIMIT_BACKOFF), (30, 60, 120, 240))
+        self.assertEqual(csindex_hist.CIRCUIT_OPEN_SEC, 60.0)
+
+    def test_403_backs_off_then_retries(self):
         body = (FX / "csindex_perf_000300_trim.json").read_bytes()
         calls, slept = [], []
 
         def fake_http_get(url, **kw):
-            calls.append(url)
+            calls.append((url, kw.get("max_attempts")))
             if len(calls) == 1:
                 raise PanelError("HTTP 403 " + url)
             return body, {}
 
-        with mock.patch.object(csindex_hist, "RATE_LIMIT_SLEEP", 0), \
-                mock.patch.object(csindex_hist, "http_get", fake_http_get), \
+        with mock.patch.object(csindex_hist, "http_get", fake_http_get), \
                 mock.patch.object(csindex_hist.time, "sleep", lambda s: slept.append(s)), \
                 self.assertLogs("etl.csindex_hist", level="WARNING") as cm:
             parsed = csindex_hist._request("000300", csindex_hist.FULL_START, "20261023")
         self.assertEqual(len(calls), 2)
-        self.assertEqual(slept, [0])
+        self.assertEqual([c[1] for c in calls], [1, 1])                                 # http_get 自己不再重试
+        self.assertEqual(slept, [30])                                                    # 第一次失败后等 30 s
         self.assertEqual(len(parsed["rows"]), 70)
         self.assertIn("403", cm.output[0])
-        self.assertEqual(csindex_hist.RATE_LIMIT_SLEEP, 90)
+        self.assertIsNone(csindex_hist._circuit_open_until)
+
+    def test_connection_reset_uses_full_schedule_then_opens_circuit(self):
+        """runner 2026-10-24 的情形：每次都是 Connection reset by peer → 等 30/60/120/240 s 共 5 次，仍失败则熔断。"""
+        calls, slept = [], []
+
+        def fake_http_get(url, **kw):
+            calls.append(url)
+            raise PanelError("重试 1 次仍失败 (ConnectionError: ('Connection aborted.', "
+                             "ConnectionResetError(104, 'Connection reset by peer'))) " + url)
+
+        with mock.patch.object(csindex_hist, "http_get", fake_http_get), \
+                mock.patch.object(csindex_hist.time, "sleep", lambda s: slept.append(s)), \
+                mock.patch.object(csindex_hist.time, "monotonic", lambda: 1000.0), \
+                self.assertLogs("etl.csindex_hist", level="WARNING") as cm:
+            with self.assertRaises(PanelError) as ctx:
+                csindex_hist._request("000300", csindex_hist.FULL_START, "20261023")
+        self.assertEqual(len(calls), 5)
+        self.assertEqual(slept, [30, 60, 120, 240])
+        self.assertIn("Connection reset", str(ctx.exception))
+        self.assertTrue(any("不再请求中证" in m for m in cm.output), cm.output)
+        self.assertEqual(csindex_hist._circuit_open_until, 1060.0)
+        # 熔断期内：直接抛「暂不可达」，不发请求、不睡
+        with mock.patch.object(csindex_hist, "http_get", fake_http_get), \
+                mock.patch.object(csindex_hist.time, "monotonic", lambda: 1030.0):
+            with self.assertRaises(PanelError) as ctx2:
+                csindex_hist._request("H00300", csindex_hist.FULL_START, "20261023")
+        self.assertIn("暂不可达", str(ctx2.exception))
+        self.assertEqual(len(calls), 5)
+        self.assertEqual(len(slept), 4)
+        # 熔断期过后再试：又是一轮完整退避
+        with mock.patch.object(csindex_hist, "http_get", fake_http_get), \
+                mock.patch.object(csindex_hist.time, "sleep", lambda s: slept.append(s)), \
+                mock.patch.object(csindex_hist.time, "monotonic", lambda: 1061.0), \
+                self.assertLogs("etl.csindex_hist", level="WARNING"):
+            with self.assertRaises(PanelError):
+                csindex_hist._request("H00300", csindex_hist.FULL_START, "20261023")
+        self.assertEqual(len(calls), 10)
+        self.assertEqual(slept, [30, 60, 120, 240] * 2)
+
+    def test_success_after_backoff_clears_circuit(self):
+        body = (FX / "csindex_perf_000300_trim.json").read_bytes()
+        calls = []
+
+        def fake_http_get(url, **kw):
+            calls.append(url)
+            if len(calls) <= 2:
+                raise PanelError("HTTP 429 " + url)
+            return body, {}
+
+        csindex_hist._circuit_open_until = 0.5                                           # 过去的熔断，不生效
+        with mock.patch.object(csindex_hist, "http_get", fake_http_get), \
+                mock.patch.object(csindex_hist.time, "sleep", lambda s: None), \
+                self.assertLogs("etl.csindex_hist", level="WARNING"):
+            parsed = csindex_hist._request("000300", csindex_hist.FULL_START, "20261023")
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(parsed["rows"]), 70)
+        self.assertIsNone(csindex_hist._circuit_open_until)
 
     def test_404_raises_immediately_without_retry(self):
         calls = []
@@ -260,26 +328,13 @@ class RateLimitRetryTest(unittest.TestCase):
             calls.append(url)
             raise PanelError("HTTP 404 " + url)
 
-        with mock.patch.object(csindex_hist, "RATE_LIMIT_SLEEP", 0), \
-                mock.patch.object(csindex_hist, "http_get", fake_http_get):
+        with mock.patch.object(csindex_hist, "http_get", fake_http_get), \
+                mock.patch.object(csindex_hist.time, "sleep", lambda s: self.fail("404 不应退避")):
             with self.assertRaises(PanelError) as ctx:
                 csindex_hist._request("000300", csindex_hist.FULL_START, "20261023")
         self.assertIn("HTTP 404", str(ctx.exception))
         self.assertEqual(len(calls), 1)
-
-    def test_second_403_propagates(self):
-        calls = []
-
-        def fake_http_get(url, **kw):
-            calls.append(url)
-            raise PanelError("HTTP 403 " + url)
-
-        with mock.patch.object(csindex_hist, "RATE_LIMIT_SLEEP", 0), \
-                mock.patch.object(csindex_hist, "http_get", fake_http_get), \
-                self.assertLogs("etl.csindex_hist", level="WARNING"):
-            with self.assertRaises(PanelError):
-                csindex_hist._request("000300", csindex_hist.FULL_START, "20261023")
-        self.assertEqual(len(calls), 2)
+        self.assertIsNone(csindex_hist._circuit_open_until)                              # 非网络错误不熔断
 
 
 class PurgeDatesTest(unittest.TestCase):
