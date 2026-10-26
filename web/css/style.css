@@ -250,6 +250,19 @@ table.data-table td.dim { color: #9CA3AF; }
 .chart-tall { height: 520px; }
 .chart-mid { height: 420px; }
 .chart-auto { min-height: 160px; }
+.chart-growth { height: 640px; }
+.chart-factors { height: 560px; }
+.chart-factors-rel { height: 420px; }
+.chart-fundroll { height: 400px; }
+.chart-fundnav { height: 520px; }
+.chart-margin { height: 480px; }
+/* 投资者结构的指标卡片 */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin: 4px 0 14px; }
+.card { border: 1px solid #E5E7EB; border-radius: 10px; padding: 10px 12px; background: #fff; }
+.card-label { font-size: 12.5px; color: var(--muted); }
+.card-value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; margin: 2px 0; }
+.card-unit { font-size: 12px; color: var(--muted); margin-left: 3px; font-weight: 400; }
+.card-meta { font-size: 12px; color: var(--muted); }
 .formula {
   margin: 10px 0 0;
   font-size: 13px;
@@ -287,6 +300,13 @@ table.data-table td.dim { color: #9CA3AF; }
   .chart-turnover { height: 520px; }
   .chart-trend { height: 600px; }
   .chart-fg { height: 640px; }
+  .chart-growth { height: 460px; }
+  .chart-factors { height: 440px; }
+  .chart-factors-rel { height: 340px; }
+  .chart-fundroll { height: 320px; }
+  .chart-fundnav { height: 420px; }
+  .chart-margin { height: 380px; }
+  .card-value { font-size: 19px; }
   .fg-big { font-size: 36px; }
   .tools-group { margin-right: 6px; }
   .range-btn { padding: 4px 8px; font-size: 12px; }

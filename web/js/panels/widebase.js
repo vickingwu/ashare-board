@@ -10,32 +10,13 @@
   var C = window.AshareCharts;
   var RANGES = [{ label: '全部', years: 0 }, { label: '10年', years: 10 }, { label: '5年', years: 5 }, { label: '3年', years: 3 }, { label: '1年', years: 1 }];
 
-  function lastNonNull(values) {
-    for (var i = values.length - 1; i >= 0; i--) if (values[i] !== null && values[i] !== undefined) return i;
-    return -1;
-  }
-
-  function firstNonNullFrom(values, from) {
-    for (var i = Math.max(0, from); i < values.length; i++) if (values[i] !== null && values[i] !== undefined) return i;
-    return -1;
-  }
-
-  // 当前窗口下每条线的归一序列、起点下标、年化
+  // 当前窗口下每条线的归一序列、起点下标、年化（C.normalizeWindow：每条线以窗口内自己的第一个值为 100）
   function windowed(d, rangeIdx) {
     var dates = d.dates;
     var years = RANGES[rangeIdx].years;
     var startIdx = years ? C.firstIndexOnOrAfter(dates, C.windowStartDate(dates[dates.length - 1], years)) : 0;
     if (startIdx < 0) startIdx = 0;
-    var winDates = dates.slice(startIdx);
-    var series = d.series.map(function (s) {
-      var vals = s.values.slice(startIdx);
-      var base = firstNonNullFrom(vals, 0);
-      var norm = C.normalizeFrom(vals, base);
-      var last = lastNonNull(norm);
-      var cg = (base >= 0 && last > base) ? C.cagr(100, norm[last], C.yearsBetween(winDates[base], winDates[last])) : null;
-      return { meta: s, values: norm, baseIdx: base, lastIdx: last, cagr: cg, baseDate: base >= 0 ? winDates[base] : null };
-    });
-    return { dates: winDates, series: series };
+    return { dates: dates.slice(startIdx), series: C.normalizeWindow(dates, d.series, startIdx) };
   }
 
   // layout = {narrow, width}：窄屏缩小右侧标注区，并按绘图区宽度抽稀年份刻度
@@ -88,23 +69,11 @@
     return opt;
   }
 
+  // 图例文字带「（价格）」后缀；切换用的 name 与 series.name（不带后缀）一致
   function legendRow(d, ctx, chart) {
-    var legend = C.el('div', 'legend');
-    var hidden = {};
-    d.series.forEach(function (s) {
-      var item = C.el('span', 'legend-item');
-      item.style.cursor = 'pointer';
-      item.appendChild(C.colorCell(ctx.palette[s.code] || ctx.palette.muted));
-      item.appendChild(document.createTextNode(s.name + (s.kind === 'price' ? '（价格）' : '')));
-      item.title = '点击显示 / 隐藏';
-      item.addEventListener('click', function () {
-        hidden[s.name] = !hidden[s.name];
-        item.style.opacity = hidden[s.name] ? 0.35 : 1;
-        chart.dispatchAction({ type: hidden[s.name] ? 'legendUnSelect' : 'legendSelect', name: s.name });
-      });
-      legend.appendChild(item);
-    });
-    return legend;
+    return C.legendToggle(null, d.series.map(function (s) {
+      return { name: s.name, label: s.name + (s.kind === 'price' ? '（价格）' : ''), color: ctx.palette[s.code] || ctx.palette.muted };
+    }), chart);
   }
 
   function summaryTable(d, ctx, container) {

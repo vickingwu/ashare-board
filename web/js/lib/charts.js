@@ -2,7 +2,8 @@
  * A股看板 —— 面板共用的图表与表格小工具（window.AshareCharts）。
  * 在 app.js 之后、各面板脚本之前加载。面板不要各自重写这里已有的归一、年化、渐变色、月末判断与坐标轴配置，
  * 也不要重写 N 日涨幅 / 滚动均值 / 横截面排名分位 / 热力图骨架 / 工具条小件（下拉、按钮组、面包屑），
- * 以及时间轴片段（timeAxis）、区间底色（bandAreas）、日期-数值行（toTimeRows）与按月回推（monthsBack）。
+ * 以及时间轴片段（timeAxis）、区间底色（bandAreas）、日期-数值行（toTimeRows）与按月回推（monthsBack）、
+ * 时间窗内逐条归一（normalizeWindow）与可点击的自绘图例（legendToggle）。
  */
 (function () {
   'use strict';
@@ -66,6 +67,32 @@
     var b = (idx >= 0 && idx < values.length) ? values[idx] : null;
     if (b === null || b === undefined || b <= 0) return values.map(function () { return null; });
     return values.map(function (v) { return (v === null || v === undefined) ? null : v / b * base; });
+  }
+
+  function lastNonNull(values) {
+    for (var i = values.length - 1; i >= 0; i--) if (values[i] !== null && values[i] !== undefined) return i;
+    return -1;
+  }
+
+  function firstNonNullFrom(values, from) {
+    for (var i = Math.max(0, from); i < values.length; i++) if (values[i] !== null && values[i] !== undefined) return i;
+    return -1;
+  }
+
+  // 时间窗内逐条归一：seriesList = [{values, …}]，窗口 = dates[startIdx:]。每条线以自己在窗口内的第一个非空值为 100，
+  // 返回 [{meta(原对象), values(窗口内归一序列), baseIdx, baseDate, lastIdx, cagr(基点到最后一个有值点的年化 %)}]，
+  // 下标都相对窗口起点；窗口内没有值的线 values 全为 null、baseIdx -1、cagr null。
+  function normalizeWindow(dates, seriesList, startIdx) {
+    startIdx = Math.max(0, startIdx || 0);
+    var winDates = dates.slice(startIdx);
+    return seriesList.map(function (s) {
+      var vals = s.values.slice(startIdx);
+      var base = firstNonNullFrom(vals, 0);
+      var norm = normalizeFrom(vals, base);
+      var last = lastNonNull(norm);
+      var cg = (base >= 0 && last > base) ? cagr(100, norm[last], yearsBetween(winDates[base], winDates[last])) : null;
+      return { meta: s, values: norm, baseIdx: base, baseDate: base >= 0 ? winDates[base] : null, lastIdx: last, cagr: cg };
+    });
   }
 
   // 该日期之后、同月内是否再无周一至周五
@@ -535,6 +562,63 @@
     return sw;
   }
 
+  // 可点击的自绘图例（图内 legend 关闭时用）：items = [{name(= series.name), color, hidden, label(显示文字，默认 name)}]，
+  // 点击 / 回车切换该系列的 legendSelect / legendUnSelect，
+  // 隐藏时项目半透明；hidden: true 的项目在挂上图表后立即隐藏一次。返回 .legend 元素，带 setChart(chart)（重新 init 后再挂）与
+  // isHidden(name)；opts.onToggle(name, hidden) 在每次切换后调用（一个图例驱动多个图表时用它转发）。container 为空时不挂载。
+  function legendToggle(container, items, chart, opts) {
+    opts = opts || {};
+    var legend = el('div', 'legend');
+    var hidden = {};
+    var current = null;
+    var nodes = {};
+
+    function dispatch(name) {
+      if (!current) return;
+      current.dispatchAction({ type: hidden[name] ? 'legendUnSelect' : 'legendSelect', name: name });
+    }
+    function paint(name) {
+      var node = nodes[name];
+      if (!node) return;
+      node.style.opacity = hidden[name] ? 0.35 : 1;
+      node.setAttribute('aria-pressed', hidden[name] ? 'false' : 'true');
+    }
+
+    items.forEach(function (it) {
+      hidden[it.name] = !!it.hidden;
+      var item = el('span', 'legend-item');
+      item.style.cursor = 'pointer';
+      item.setAttribute('role', 'button');
+      item.tabIndex = 0;
+      item.title = '点击显示 / 隐藏';
+      item.appendChild(colorCell(it.color || palette.muted));
+      item.appendChild(document.createTextNode(it.label || it.name));
+      nodes[it.name] = item;
+      paint(it.name);
+      function toggle() {
+        hidden[it.name] = !hidden[it.name];
+        paint(it.name);
+        dispatch(it.name);
+        if (typeof opts.onToggle === 'function') opts.onToggle(it.name, hidden[it.name]);
+      }
+      item.addEventListener('click', toggle);
+      item.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); }
+      });
+      legend.appendChild(item);
+    });
+
+    legend.setChart = function (c) {
+      current = c || null;
+      items.forEach(function (it) { if (hidden[it.name]) dispatch(it.name); });
+      return legend;
+    };
+    legend.isHidden = function (name) { return !!hidden[name]; };
+    if (chart) legend.setChart(chart);
+    if (container) container.appendChild(legend);
+    return legend;
+  }
+
   window.AshareCharts = {
     parseDate: parseDate,
     yearsBetween: yearsBetween,
@@ -543,6 +627,9 @@
     windowStartDate: windowStartDate,
     monthsBack: monthsBack,
     normalizeFrom: normalizeFrom,
+    normalizeWindow: normalizeWindow,
+    lastNonNull: lastNonNull,
+    firstNonNullFrom: firstNonNullFrom,
     isLastWeekdayOfMonth: isLastWeekdayOfMonth,
     monthEndIndexes: monthEndIndexes,
     fmtMult: fmtMult,
@@ -572,6 +659,7 @@
     selectControl: selectControl,
     crumbs: crumbs,
     makeTable: makeTable,
-    colorCell: colorCell
+    colorCell: colorCell,
+    legendToggle: legendToggle
   };
 })();
