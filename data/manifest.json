@@ -11,8 +11,8 @@
   },
   "loss": {
    "ok": true,
-   "asOf": "2026-10-27",
-   "generated": "2026-10-27T10:17:55+08:00",
+   "asOf": "2026-10-16",
+   "generated": "2026-10-27T10:06:12+08:00",
    "error": null,
    "durationSec": 0.0,
    "static": true
@@ -94,15 +94,15 @@
    "asOf": "2026-09-30",
    "generated": "2026-10-23T17:19:36+08:00",
    "error": null,
-   "durationSec": 9.3,
+   "durationSec": 79.7,
    "static": false
   },
   "factors": {
    "ok": true,
-   "asOf": "2026-10-23",
-   "generated": "2026-10-26T11:26:36+08:00",
+   "asOf": "2026-10-26",
+   "generated": "2026-10-27T10:03:09+08:00",
    "error": null,
-   "durationSec": 21.7,
+   "durationSec": 83.5,
    "static": false
   },
   "fundroll": {
@@ -110,15 +110,15 @@
    "asOf": "2026-10-23",
    "generated": "2026-10-26T11:30:26+08:00",
    "error": null,
-   "durationSec": 229.5,
+   "durationSec": 82.1,
    "static": false
   },
   "investors": {
    "ok": true,
-   "asOf": "2026-10-23",
-   "generated": "2026-10-26T11:30:36+08:00",
+   "asOf": "2026-10-26",
+   "generated": "2026-10-27T10:06:12+08:00",
    "error": null,
-   "durationSec": 1.2,
+   "durationSec": 21.7,
    "static": false
   }
  }

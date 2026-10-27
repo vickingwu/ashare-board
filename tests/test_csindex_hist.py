@@ -231,7 +231,7 @@ class GetHistoryTest(unittest.TestCase):
 
 class RateLimitRetryTest(unittest.TestCase):
     """HTTP 403 / 连接重置 → 按 RATE_LIMIT_BACKOFF（30 → 60 → 120 → 240 s）长退避重试，共 5 次；其它 4xx 直接抛出；
-    用完退避仍失败 → 熔断 CIRCUIT_OPEN_SEC 秒。"""
+    用完退避仍失败 → 熔断，直到 reset_circuit()（编排器第二轮前），而不是只开 60 秒。"""
 
     def setUp(self):
         csindex_hist.reset_circuit()
@@ -241,7 +241,8 @@ class RateLimitRetryTest(unittest.TestCase):
 
     def test_backoff_schedule_constants(self):
         self.assertEqual(tuple(csindex_hist.RATE_LIMIT_BACKOFF), (30, 60, 120, 240))
-        self.assertEqual(csindex_hist.CIRCUIT_OPEN_SEC, 60.0)
+        self.assertFalse(hasattr(csindex_hist, "CIRCUIT_OPEN_SEC"))                     # 不再按秒数自动关闭
+        self.assertFalse(csindex_hist.circuit_open())
 
     def test_403_backs_off_then_retries(self):
         body = (FX / "csindex_perf_000300_trim.json").read_bytes()
@@ -262,10 +263,11 @@ class RateLimitRetryTest(unittest.TestCase):
         self.assertEqual(slept, [30])                                                    # 第一次失败后等 30 s
         self.assertEqual(len(parsed["rows"]), 70)
         self.assertIn("403", cm.output[0])
-        self.assertIsNone(csindex_hist._circuit_open_until)
+        self.assertFalse(csindex_hist.circuit_open())
 
     def test_connection_reset_uses_full_schedule_then_opens_circuit(self):
-        """runner 2026-10-24 的情形：每次都是 Connection reset by peer → 等 30/60/120/240 s 共 5 次，仍失败则熔断。"""
+        """runner 2026-10-24 的情形：每次都是 Connection reset by peer → 等 30/60/120/240 s 共 5 次，仍失败则熔断，
+        本轮后续的中证请求直接抛「暂不可达」（不发请求、不睡），直到 reset_circuit() 才再给一轮完整退避。"""
         calls, slept = [], []
 
         def fake_http_get(url, **kw):
@@ -283,16 +285,23 @@ class RateLimitRetryTest(unittest.TestCase):
         self.assertEqual(slept, [30, 60, 120, 240])
         self.assertIn("Connection reset", str(ctx.exception))
         self.assertTrue(any("不再请求中证" in m for m in cm.output), cm.output)
-        self.assertEqual(csindex_hist._circuit_open_until, 1060.0)
-        # 熔断期内：直接抛「暂不可达」，不发请求、不睡
-        with mock.patch.object(csindex_hist, "http_get", fake_http_get), \
-                mock.patch.object(csindex_hist.time, "monotonic", lambda: 1030.0):
-            with self.assertRaises(PanelError) as ctx2:
-                csindex_hist._request("H00300", csindex_hist.FULL_START, "20261023")
-        self.assertIn("暂不可达", str(ctx2.exception))
+        self.assertTrue(csindex_hist.circuit_open())
+        self.assertEqual(csindex_hist._circuit_open_since, 1000.0)
+        # 熔断中：直接抛「暂不可达」，不发请求、不睡——30 s 后、1 小时后都一样（不再按秒数自动关闭）
+        for later in (1030.0, 1061.0, 1000.0 + 3600):
+            with mock.patch.object(csindex_hist, "http_get", fake_http_get), \
+                    mock.patch.object(csindex_hist.time, "sleep", lambda s: self.fail("熔断中不应退避")), \
+                    mock.patch.object(csindex_hist.time, "monotonic", lambda: later):
+                with self.assertRaises(PanelError) as ctx2:
+                    csindex_hist._request("H00300", csindex_hist.FULL_START, "20261023")
+            self.assertIn("暂不可达", str(ctx2.exception))
+            self.assertIn("熔断", str(ctx2.exception))
+            self.assertIn("000300 5 次尝试仍失败", str(ctx2.exception))
         self.assertEqual(len(calls), 5)
         self.assertEqual(len(slept), 4)
-        # 熔断期过后再试：又是一轮完整退避
+        # 编排器第二轮前 reset_circuit()：又是一轮完整退避
+        csindex_hist.reset_circuit()
+        self.assertFalse(csindex_hist.circuit_open())
         with mock.patch.object(csindex_hist, "http_get", fake_http_get), \
                 mock.patch.object(csindex_hist.time, "sleep", lambda s: slept.append(s)), \
                 mock.patch.object(csindex_hist.time, "monotonic", lambda: 1061.0), \
@@ -301,8 +310,9 @@ class RateLimitRetryTest(unittest.TestCase):
                 csindex_hist._request("H00300", csindex_hist.FULL_START, "20261023")
         self.assertEqual(len(calls), 10)
         self.assertEqual(slept, [30, 60, 120, 240] * 2)
+        self.assertTrue(csindex_hist.circuit_open())
 
-    def test_success_after_backoff_clears_circuit(self):
+    def test_success_after_backoff_keeps_circuit_closed(self):
         body = (FX / "csindex_perf_000300_trim.json").read_bytes()
         calls = []
 
@@ -312,14 +322,13 @@ class RateLimitRetryTest(unittest.TestCase):
                 raise PanelError("HTTP 429 " + url)
             return body, {}
 
-        csindex_hist._circuit_open_until = 0.5                                           # 过去的熔断，不生效
         with mock.patch.object(csindex_hist, "http_get", fake_http_get), \
                 mock.patch.object(csindex_hist.time, "sleep", lambda s: None), \
                 self.assertLogs("etl.csindex_hist", level="WARNING"):
             parsed = csindex_hist._request("000300", csindex_hist.FULL_START, "20261023")
         self.assertEqual(len(calls), 3)
         self.assertEqual(len(parsed["rows"]), 70)
-        self.assertIsNone(csindex_hist._circuit_open_until)
+        self.assertFalse(csindex_hist.circuit_open())                                    # 没用完退避就不熔断
 
     def test_404_raises_immediately_without_retry(self):
         calls = []
@@ -334,7 +343,7 @@ class RateLimitRetryTest(unittest.TestCase):
                 csindex_hist._request("000300", csindex_hist.FULL_START, "20261023")
         self.assertIn("HTTP 404", str(ctx.exception))
         self.assertEqual(len(calls), 1)
-        self.assertIsNone(csindex_hist._circuit_open_until)                              # 非网络错误不熔断
+        self.assertFalse(csindex_hist.circuit_open())                                    # 非网络错误不熔断
 
 
 class PurgeDatesTest(unittest.TestCase):

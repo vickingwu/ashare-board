@@ -200,7 +200,9 @@ class HttpGetTest(unittest.TestCase):
         self.assertEqual(clock.sleeps, [])
 
     def test_new_hosts_have_polite_intervals(self):
-        self.assertEqual(common.HOST_MIN_INTERVAL["www.csindex.com.cn"], 3.0)
+        # 中证的限流是约 100 s 窗口内第 13 个请求起 403 的突发计数（3 ± 1 s 第 15 个、5 ± 1 s 第 13 个都撞到；10 / 12 ± 1 s 26 条全过，
+        # m4_work/probe_csindex_gap_*.txt）：12 s 让 12 个请求至少跨 121 s
+        self.assertEqual(common.HOST_MIN_INTERVAL["www.csindex.com.cn"], 12.0)
         for host in ("datacenter-web.eastmoney.com", "www.sge.com.cn", "www.chinamoney.com.cn", "thedocs.worldbank.org"):
             self.assertGreaterEqual(common.HOST_MIN_INTERVAL[host], 1.0)
 
@@ -208,11 +210,11 @@ class HttpGetTest(unittest.TestCase):
     def test_csindex_gap_has_plus_minus_one_second_jitter(self):
         self.assertEqual(common.HOST_JITTER["www.csindex.com.cn"], 1.0)
         with mock.patch.object(common.random, "uniform", lambda a, b: a):          # 最小
-            self.assertAlmostEqual(common.throttle_gap("www.csindex.com.cn"), 2.0)
+            self.assertAlmostEqual(common.throttle_gap("www.csindex.com.cn"), 11.0)
         with mock.patch.object(common.random, "uniform", lambda a, b: b):          # 最大
-            self.assertAlmostEqual(common.throttle_gap("www.csindex.com.cn"), 4.0)
+            self.assertAlmostEqual(common.throttle_gap("www.csindex.com.cn"), 13.0)
         seen = {common.throttle_gap("www.csindex.com.cn") for _ in range(50)}
-        self.assertTrue(all(2.0 <= g <= 4.0 for g in seen))
+        self.assertTrue(all(11.0 <= g <= 13.0 for g in seen))
         self.assertGreater(len(seen), 5)                                            # 真的在抖
         self.assertEqual(common.throttle_gap("qt.gtimg.cn"), 0.3)                    # 其它主机无抖动
         # 实际限速：两次中证请求之间 sleep 了抖动后的间隔
@@ -226,7 +228,7 @@ class HttpGetTest(unittest.TestCase):
         finally:
             for p in reversed(patches):
                 p.stop()
-        self.assertEqual(clock.sleeps, [3.5])
+        self.assertEqual(clock.sleeps, [12.5])
 
     def test_max_attempts_one_disables_inner_retry(self):
         clock, sess, patches = self._patched([_Resp(503), _Resp(200)])

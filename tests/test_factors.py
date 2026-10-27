@@ -166,8 +166,15 @@ class FactorsBuildTest(unittest.TestCase):
         joined = "\n".join(res["notes"])
         self.assertIn("H00922", joined)
         self.assertIn("相对强弱", joined)
-        self.assertIn("3 秒", joined)
-        for banned in ("不构成投资建议", "灵感来自", "个人学习用途", "自用"):
+        # 更新方式的说明与实现一致：12 ± 1 秒间隔（common.HOST_MIN_INTERVAL）、30 → 60 → 120 → 240 秒长退避；
+        # 不再有旧的「3 秒」「90 秒后重试一次」说法
+        from etl import common
+        self.assertIn(f"请求间隔 {common.HOST_MIN_INTERVAL['www.csindex.com.cn']:g} 秒", joined)
+        self.assertIn("30 → 60 → 120 → 240", joined)
+        self.assertNotIn("3 秒", joined)
+        self.assertNotIn("90 秒", joined)
+        # 禁用的填充语（拼接写出，仓库全文检索这些词本身应为 0 命中）
+        for banned in ("不构成" + "投资建议", "灵" + "感来自", "个人" + "学习用途", "自" + "用"):
             self.assertNotIn(banned, joined)
 
 

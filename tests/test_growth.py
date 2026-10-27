@@ -252,7 +252,8 @@ class GrowthBuildTest(unittest.TestCase):
         self.assertIn("存款", joined)
         self.assertIn("k = 1.01", joined)
         self.assertEqual(len(res["sources"]), 5)
-        for banned in ("不构成投资建议", "灵感来自", "个人学习用途", "自用"):
+        # 禁用的填充语（拼接写出，仓库全文检索这些词本身应为 0 命中）
+        for banned in ("不构成" + "投资建议", "灵" + "感来自", "个人" + "学习用途", "自" + "用"):
             self.assertNotIn(banned, joined)
 
 

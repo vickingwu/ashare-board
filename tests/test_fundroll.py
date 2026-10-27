@@ -140,7 +140,8 @@ class FundrollBuildTest(unittest.TestCase):
         joined = "\n".join(res["notes"])
         self.assertIn("930897", joined)
         self.assertIn("252", joined)
-        for banned in ("不构成投资建议", "灵感来自", "个人学习用途", "自用"):
+        # 禁用的填充语（拼接写出，仓库全文检索这些词本身应为 0 命中）
+        for banned in ("不构成" + "投资建议", "灵" + "感来自", "个人" + "学习用途", "自" + "用"):
             self.assertNotIn(banned, joined)
 
 

@@ -161,12 +161,40 @@ class BuildDataTest(unittest.TestCase):
         self.reset_patch.stop()
         try:
             market_state._UPDATE_RESULT = (None, PanelError("x"))
-            csindex_hist._circuit_open_until = 1e12
+            csindex_hist._circuit_open_since = 1.0
+            csindex_hist._circuit_reason = "000300 5 次尝试仍失败"
+            self.assertTrue(csindex_hist.circuit_open())
             build_data.reset_for_second_pass()
             self.assertIsNone(market_state._UPDATE_RESULT)
-            self.assertIsNone(csindex_hist._circuit_open_until)
+            self.assertFalse(csindex_hist.circuit_open())
         finally:
             self.reset_patch.start()
+
+    def test_real_static_loss_panel_is_a_no_op_on_a_later_day(self):
+        """评审 M4-R1-01：loss 面板的 asOf 曾是运行日，于是 loss.json 与 manifest 每天改写、周末空跑也会提交。
+        用真实的 etl.panels.loss 在两个不同日期各跑一次：第二次字节不变、manifest 不改写。"""
+        from datetime import datetime
+        from etl import common
+        from etl.panels import loss
+        panels = [loss, _panel("coverage", _ok("coverage"))]
+        day1 = datetime(2026, 10, 24, 7, 55, tzinfo=common.TZ)          # 周六 07:53 兜底
+        day2 = datetime(2026, 10, 25, 7, 55, tzinfo=common.TZ)          # 周日 07:53 兜底
+        with mock.patch.object(common, "now_sh", lambda: day1):
+            self.assertEqual(self._run(panels), 0)
+        lj = self.data_dir / "loss.json"
+        man = self.data_dir / "manifest.json"
+        first, first_man = lj.read_bytes(), man.read_bytes()
+        env1 = json.loads(first)
+        self.assertEqual(env1["asOf"], loss.AS_OF)
+        self.assertNotEqual(env1["asOf"], "2026-10-24")                              # 不再是运行日
+        self.assertTrue(self._manifest()["panels"]["loss"]["static"])
+        with mock.patch.object(common, "now_sh", lambda: day2), \
+                self.assertLogs("etl.build", level="INFO") as cm:
+            self.assertEqual(self._run(panels), 0)
+        self.assertEqual(lj.read_bytes(), first)                                     # 第二天：字节不变
+        self.assertEqual(man.read_bytes(), first_man)                                # manifest 不改写
+        self.assertTrue(any("面板 loss 完成" in m and "无差别" in m for m in cm.output), cm.output)
+        self.assertTrue(any("manifest 无变化" in m for m in cm.output), cm.output)
 
 
 if __name__ == "__main__":

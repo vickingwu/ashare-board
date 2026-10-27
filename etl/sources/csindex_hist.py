@@ -24,16 +24,20 @@
 ``cache_is_fresh`` 规则不重复请求。历史上合并进缓存的假日占位行用
 ``python -m etl.sources.csindex_hist --purge-dates 2026-10-01`` 一次性清掉。
 
-限流与封禁（2026-10-21 / 10-23 / 10-24 观察）：2 秒间隔下连续 16 个全史请求（约 45 秒）在第 16 个收到 HTTP 403，
-几分钟后自愈；结合 10-21 的「8 秒 12 个 → 403」，实际上限约每分钟 15 个请求。10-23 runner 上 12 个小请求之后
-隔 76 秒的第 13 个起连续 403；10-24 早上 runner 从第一个请求起连续 15 次 ``Connection reset by peer``——
-这已经是 IP 级封禁，``http_get`` 默认的 2 → 16 秒短退避无济于事。对策：
-* 主机最小间隔 3 ± 1 秒（``common.HOST_MIN_INTERVAL`` / ``HOST_JITTER``）；
+限流与封禁（2026-10-21 / 10-23 / 10-24 / 10-26 观察）：限流是约 100 秒窗口内的**突发计数**——第 13 个左右的请求起 HTTP 403，
+封 90–210 秒，与 2–6 秒的间隔无关：10-21 本机与 runner 8 秒内 12 个小增量 → 第 13 个 403；10-23 runner 2 秒间隔 12 个之后
+隔 76 秒的第 13 个仍 403；10-23 本机 2 秒间隔第 16 个全史请求 403；10-26 本机 3 ± 1 秒第 15 个（+40 s）、5 ± 1 秒第 13 个
+（+69 s）都 403 并多等了 210 秒，而 10 ± 1 秒与 12 ± 1 秒的 26 条增量全部通过（``m4_work/probe_csindex_gap_*.txt``）。
+10-24 早上 runner 从第一个请求起连续 15 次 ``Connection reset by peer``——这已经是 IP 级封禁，``http_get`` 默认的
+2 → 16 秒短退避无济于事。对策：
+* 主机最小间隔 12 ± 1 秒（``common.HOST_MIN_INTERVAL`` / ``HOST_JITTER``）：12 个请求至少跨 121 秒，第 13 个落在窗口之外；
+  26 条序列约 5 分钟，比 5 秒间隔 + 一次 210 秒封禁更快；
 * ``_request`` 以 ``max_attempts=1`` 调 ``http_get``（自己管重试），遇到 403 / 429 / 5xx / 连接重置 / 超时按
   ``RATE_LIMIT_BACKOFF``（30 → 60 → 120 → 240 秒）长退避再试，共 5 次；其它 4xx（如 404）与 TLS 错误立即抛出；
-* 熔断：一条序列把退避用完仍失败，之后 ``CIRCUIT_OPEN_SEC`` 秒内本进程对中证的请求直接抛 PanelError（「暂不可达」），
-  不再逐条等 7 分多钟；编排器的第二轮（``build_data.py`` 全部面板跑完后暂停 60 秒再试网络类失败的面板）正好落在
-  熔断期之外，再给一次完整的退避机会。
+* 熔断：一条序列把退避用完仍失败，本进程此后对中证的请求直接抛 PanelError（「暂不可达」），直到 ``reset_circuit()``
+  ——编排器只在第二轮（``build_data.py`` 全部面板跑完后暂停 60 秒再试网络类失败的面板）之前调用它。于是一次整段
+  运行里中证一直不可达时，每轮最多只付一次完整退避（约 7.5 分钟），其余依赖中证的面板立即按失败隔离保留旧 JSON；
+  若熔断只开 60 秒，后面每个中证面板都会再付一次 7.5 分钟（评审 2026-10-26 指出）。
 """
 from __future__ import annotations
 
@@ -56,9 +60,10 @@ CACHE_SUB = "csindex_hist"
 TIMEOUT = 60
 # 限流 / 连接重置后的长退避（秒）：第 1 次失败后等 30 s，再失败等 60 s …，共 len+1 = 5 次尝试；测试里打成 ()
 RATE_LIMIT_BACKOFF: Sequence[float] = (30, 60, 120, 240)
-# 一条序列把退避用完仍失败 → 这么多秒内本进程不再请求中证（直接抛「暂不可达」）
-CIRCUIT_OPEN_SEC = 60.0
-_circuit_open_until: Optional[float] = None
+# 熔断：一条序列把退避用完仍失败 → 本进程不再请求中证（直接抛「暂不可达」），直到 reset_circuit()（编排器第二轮之前）。
+# 记录的是打开熔断的时刻（time.monotonic()）与原因，只用于日志；None = 未熔断
+_circuit_open_since: Optional[float] = None
+_circuit_reason: str = ""
 
 Row = Tuple[str, float, Optional[float]]   # (YYYY-MM-DD, close, pe|None)
 
@@ -120,31 +125,37 @@ def parse_perf(body: bytes, start: Optional[str] = None, known_dates: Collection
     return {"code": code, "name": name, "nameFull": name_full, "rows": rows}
 
 
+def circuit_open() -> bool:
+    """熔断是否打开（本进程内，直到 reset_circuit()）。"""
+    return _circuit_open_since is not None
+
+
 def reset_circuit() -> None:
     """关闭熔断（测试与编排器的第二轮用）。"""
-    global _circuit_open_until
-    _circuit_open_until = None
+    global _circuit_open_since, _circuit_reason
+    _circuit_open_since = None
+    _circuit_reason = ""
 
 
 def _fetch_with_backoff(code: str, url: str) -> bytes:
     """按 RATE_LIMIT_BACKOFF 长退避请求一条中证序列；网络 / 限流类错误用完退避仍失败则打开熔断并抛出。"""
-    global _circuit_open_until
-    now = time.monotonic()
-    if _circuit_open_until is not None and now < _circuit_open_until:
-        raise PanelError(f"csindex {code}: 中证指数官网暂不可达（熔断中，{_circuit_open_until - now:.0f} s 后恢复尝试）{url}")
+    global _circuit_open_since, _circuit_reason
+    if _circuit_open_since is not None:
+        raise PanelError(f"csindex {code}: 中证指数官网暂不可达（熔断中：{time.monotonic() - _circuit_open_since:.0f} s 前 "
+                         f"{_circuit_reason}；本轮不再请求，编排器第二轮前重置）{url}")
     attempts = len(RATE_LIMIT_BACKOFF) + 1
     for i in range(attempts):
         try:
             body, _hdr = http_get(url, timeout=TIMEOUT, headers=HEADERS, max_attempts=1)
-            _circuit_open_until = None
             return body
         except PanelError as e:
             if not is_network_error(str(e)):
                 raise                                   # 404 之类的 4xx、TLS：重试无益
             if i >= attempts - 1:
-                _circuit_open_until = time.monotonic() + CIRCUIT_OPEN_SEC
-                log.error("csindex %s: 限流 / 连接重置，%d 次尝试仍失败，%.0f s 内不再请求中证: %s", code, attempts,
-                          CIRCUIT_OPEN_SEC, e)
+                _circuit_open_since = time.monotonic()
+                _circuit_reason = f"{code} {attempts} 次尝试仍失败"
+                log.error("csindex %s: 限流 / 连接重置，%d 次尝试仍失败，本轮不再请求中证（直到编排器第二轮）: %s", code,
+                          attempts, e)
                 raise
             pause = RATE_LIMIT_BACKOFF[i]
             log.warning("csindex %s: %s（限流或封禁），%.0f s 后第 %d/%d 次重试", code, str(e)[:120], pause, i + 2, attempts)

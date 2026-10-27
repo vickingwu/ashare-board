@@ -172,7 +172,8 @@ class InvestorsBuildTest(unittest.TestCase):
         joined = "\n".join(res["notes"])
         for word in ("沪市", "深市", "新增投资者", "公募", "北向", "07:53"):
             self.assertIn(word, joined)
-        for banned in ("不构成投资建议", "灵感来自", "个人学习用途", "自用"):
+        # 禁用的填充语（拼接写出，仓库全文检索这些词本身应为 0 命中）
+        for banned in ("不构成" + "投资建议", "灵" + "感来自", "个人" + "学习用途", "自" + "用"):
             self.assertNotIn(banned, joined)
 
     def test_build_without_overview(self):
