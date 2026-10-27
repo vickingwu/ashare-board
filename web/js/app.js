@@ -3,6 +3,8 @@
  *
  * 职责：面板注册表、导航、懒加载 data/<id>.json、数据新鲜度条、深链接、窗口缩放、PNG 导出。
  * 面板模块只需调用 AshareBoard.registerPanel({...render(body, json, ctx)}) 即可接入。
+ * 深链接可带查询串：#panel-<id>?k=v&k2=v2 —— 面板在 render 里用 ctx.hashQuery() 读取，用 ctx.setHashQuery({...}) 写回；
+ * render 还可返回 exportMeta()（导出 PNG 的副标题 / 来源 / 截至日）与 onHashQuery(q)（hashchange 时收到新的查询串）。
  * 不依赖任何构建工具；ES2017+，直接在浏览器运行。
  */
 (function () {
@@ -146,6 +148,38 @@
     };
   }
 
+  // ---------------------------------------------------------------- 深链接的 hash 解析
+  // '#panel-stock?s=sh600519&r=10y' → {id: 'stock', query: {s: 'sh600519', r: '10y'}}；'#panel-growth' → {id: 'growth', query: null}；其它 → null
+  function parseHash(hash) {
+    var m = /^#panel-([\w-]+)(?:\?([^#]*))?$/.exec(hash || '');
+    if (!m) return null;
+    var query = null;
+    if (m[2]) {
+      query = {};
+      var params = new URLSearchParams(m[2]);
+      params.forEach(function (v, k) { query[k] = v; });
+    }
+    return { id: m[1], query: query };
+  }
+
+  // 当前 hash 指向面板 id 时返回它的查询对象（无查询串时 null），否则 null
+  function hashQuery(id) {
+    var h = parseHash(location.hash);
+    return h && h.id === id ? h.query : null;
+  }
+
+  // 把面板状态写回地址栏（replaceState，不滚动、不产生历史记录）；值为 null / undefined 的参数省略
+  function setHashQuery(id, params) {
+    var qs = new URLSearchParams();
+    Object.keys(params || {}).forEach(function (k) {
+      if (params[k] !== null && params[k] !== undefined) qs.set(k, String(params[k]));
+    });
+    var s = qs.toString();
+    try {
+      history.replaceState(null, '', '#panel-' + id + (s ? '?' + s : ''));
+    } catch (e) { /* file:// 等场景下 replaceState 可能抛错，忽略 */ }
+  }
+
   // ---------------------------------------------------------------- 构建页面骨架
   function buildShell() {
     var nav = document.getElementById('nav');
@@ -199,8 +233,15 @@
       }
       (json.notes || []).forEach(function (n) { p.notesUl.appendChild(el('li', null, n)); });
       p.bodyEl.innerHTML = '';
-      var out = p.render(p.bodyEl, json, { echarts: window.echarts, palette: palette, fmt: fmt });
+      var out = p.render(p.bodyEl, json, {
+        echarts: window.echarts, palette: palette, fmt: fmt,
+        hashQuery: function () { return hashQuery(p.id); },
+        setHashQuery: function (params) { setHashQuery(p.id, params); },
+        setAsOf: function (text) { p.asofEl.textContent = text; }
+      });
       p.charts = (out && out.charts) ? out.charts.filter(Boolean) : [];
+      p.exportMeta = out && typeof out.exportMeta === 'function' ? out.exportMeta : null;
+      p.onHashQuery = out && typeof out.onHashQuery === 'function' ? out.onHashQuery : null;
       p.btnExport.hidden = p.charts.length === 0;
       return p;
     }).catch(function (err) {
@@ -280,17 +321,22 @@
     });
   }
 
-  function exportPanel(id) {
+  // opts.pixelRatio：导出倍率（默认 3；汇总页用 2）。面板 render 返回的 exportMeta() 可覆盖副标题 / 来源 / 截至日
+  // （个股面板的数据不来自 data/*.json，页脚要写腾讯行情与最后一根 K 线的日期）；exportMeta 抛错即导出失败（如尚未查询）。
+  function exportPanel(id, opts) {
     var p = byId[id];
     if (!p) return Promise.reject(new Error('未注册的面板: ' + id));
+    var ratio = (opts && opts.pixelRatio) || 3;
+    var meta = {};
     return loadPanel(id).then(function () {
       if (!p.charts.length) throw new Error('该面板没有可导出的图表');
+      meta = p.exportMeta ? (p.exportMeta() || {}) : {};
       var urls = p.charts.map(function (c) {
-        return c.getDataURL({ type: 'png', pixelRatio: 3, backgroundColor: '#ffffff' });
+        return c.getDataURL({ type: 'png', pixelRatio: ratio, backgroundColor: '#ffffff' });
       });
       return Promise.all(urls.map(loadImage));
     }).then(function (imgs) {
-      var S = 3;
+      var S = ratio;
       var headerH = 90 * S, footerH = 56 * S, gap = 10 * S;
       var width = Math.max.apply(null, imgs.map(function (i) { return i.width; }));
       var height = headerH + footerH + imgs.reduce(function (a, i) { return a + i.height + gap; }, 0);
@@ -307,7 +353,7 @@
       ctx.fillText(p.title, 24 * S, 22 * S);
       ctx.fillStyle = palette.muted;
       ctx.font = (13 * S) + 'px ' + fontStack;
-      ctx.fillText(p.subtitle, 24 * S, 54 * S);
+      ctx.fillText(meta.subtitle || p.subtitle, 24 * S, 54 * S, width - 48 * S);
       var y = headerH;
       imgs.forEach(function (img) {
         ctx.drawImage(img, 0, y);
@@ -318,7 +364,7 @@
       var todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
       ctx.fillStyle = palette.muted;
       ctx.font = (12 * S) + 'px ' + fontStack;
-      var foot = '数据来源：' + ((json.sources || []).join(' · ') || '—') + ' · 数据截至 ' + fmt.date(json.asOf) +
+      var foot = '数据来源：' + ((meta.sources || json.sources || []).join(' · ') || '—') + ' · 数据截至 ' + fmt.date(meta.asOf || json.asOf) +
         ' · 导出于 ' + todayStr;
       ctx.fillText(foot, 24 * S, height - footerH + 18 * S, width - 48 * S);
       return canvas.toDataURL('image/png');
@@ -329,9 +375,11 @@
     var p = byId[id];
     if (btn) btn.disabled = true;
     exportPanel(id).then(function (dataUrl) {
+      var asOf = p.json && p.json.asOf;
+      try { var m = p.exportMeta ? p.exportMeta() : null; if (m && m.asOf) asOf = m.asOf; } catch (e) { /* 文件名退回 json.asOf */ }
       var a = document.createElement('a');
       a.href = dataUrl;
-      a.download = id + '_' + fmt.date(p.json && p.json.asOf) + '.png';
+      a.download = id + '_' + fmt.date(asOf) + '.png';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -389,7 +437,8 @@
         entries.forEach(function (en) { ratios[en.target.id] = en.isIntersecting ? en.intersectionRatio : 0; });
         var best = null;
         Object.keys(ratios).forEach(function (k) { if (ratios[k] > 0 && (best === null || ratios[k] > ratios[best])) best = k; });
-        document.querySelectorAll('.nav-link').forEach(function (a) {
+        // 只管 #nav 里生成的面板链接；顶栏的页面链接（看板 ⇄ 汇总）是静态的，不参与高亮切换
+        document.querySelectorAll('#nav .nav-link').forEach(function (a) {
           a.classList.toggle('active', best !== null && a.getAttribute('href') === '#' + best);
         });
       }, { threshold: [0.25, 0.5] });
@@ -401,9 +450,9 @@
     // 深链接：先把目标及其上方的面板都渲染好（避免上方面板撑开后目标位移），再滚动一次。
     // 期间关闭浏览器的滚动位置恢复，并在就位后才启用平滑滚动，否则两者会和这次定位打架。
     var enableSmooth = function () { document.documentElement.classList.add('smooth'); };
-    var m = /^#panel-([\w-]+)$/.exec(location.hash || '');
-    if (m && byId[m[1]]) {
-      var targetId = m[1];
+    var h0 = parseHash(location.hash);
+    if (h0 && byId[h0.id]) {
+      var targetId = h0.id;
       if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
       var idx = registry.findIndex(function (p) { return p.id === targetId; });
       var above = registry.slice(0, idx + 1).map(function (p) { return loadPanel(p.id); });
@@ -417,6 +466,15 @@
     } else {
       enableSmooth();
     }
+
+    // 页面已打开时地址栏换成带查询串的深链接（如粘贴 #panel-stock?s=sh600519）：把查询串交给该面板；
+    // 不带查询串的 hash 仍由浏览器原生锚点定位，其它面板没有 onHashQuery，不受影响
+    window.addEventListener('hashchange', function () {
+      var h = parseHash(location.hash);
+      if (h && byId[h.id] && h.query) {
+        loadPanel(h.id).then(function (pp) { if (pp.onHashQuery) pp.onHashQuery(h.query); });
+      }
+    });
 
     window.addEventListener('resize', debounce(function () {
       registry.forEach(function (p) {
@@ -443,6 +501,10 @@
     registerPanel: registerPanel,
     exportPanel: exportPanel,
     loadPanel: loadPanel,
+    panels: function () { return registry.map(function (p) { return { id: p.id, title: p.title, subtitle: p.subtitle }; }); },
+    parseHash: parseHash,
+    hashQuery: hashQuery,
+    setHashQuery: setHashQuery,
     palette: palette,
     fmt: fmt,
     DATA_BASE: DATA_BASE

@@ -7,14 +7,14 @@
 所以 index.html 得通过这个服务打开，而不是直接从磁盘打开。
 
 路由：
-    /            -> web/index.html
+    /              -> web/index.html
+    /summary.html  -> web/summary.html（汇总页）
     /css /js /vendor -> web/ 下对应文件
-    /data/*.json -> data/ 目录（ETL 输出）
-    /api/chart   -> 501（个股出图接口留给 M5）
+    /data/*.json   -> data/ 目录（ETL 输出）
+其余路径按静态文件处理，不存在即 404；没有任何服务端接口（个股走势图在浏览器里直接取腾讯行情）。
 所有响应带 Cache-Control: no-store，刷新页面即见最新数据。只用标准库，Python 3.9+。
 """
 import http.server
-import json
 import posixpath
 import sys
 from pathlib import Path
@@ -60,17 +60,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
-
-    def do_GET(self):
-        if urlsplit(self.path).path == "/api/chart":
-            body = json.dumps({"error": "个股出图接口将在 M5 实现"}, ensure_ascii=False).encode("utf-8")
-            self.send_response(501)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
-        super().do_GET()
 
     def log_message(self, fmt, *args):
         sys.stderr.write("%s %s\n" % (self.address_string(), fmt % args))

@@ -70,6 +70,8 @@ body {
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
+/* 顶栏右侧的页面链接（看板 ⇄ 汇总） */
+.nav-page { margin-left: auto; font-weight: 500; }
 
 /* ---------- 新鲜度条 ---------- */
 .freshness {
@@ -279,6 +281,86 @@ table.data-table td.dim { color: #9CA3AF; }
   background: #FFF6E0; color: #6B4E00; border: 1px solid #E0A100; margin-left: 4px; vertical-align: middle;
 }
 
+/* ---------- 个股走势图：搜索框、联想、读数、图高、阶段表、分年 ---------- */
+.stock-search { position: relative; }
+.stock-input {
+  font: inherit;
+  font-size: 13px;
+  width: 240px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--fg);
+}
+.stock-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+.stock-suggest {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  z-index: 5;
+  min-width: 300px;
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  font-size: 13px;
+}
+.stock-suggest[hidden] { display: none; }
+.stock-suggest li { display: flex; align-items: center; gap: 10px; padding: 5px 12px; cursor: pointer; }
+.stock-suggest li:hover, .stock-suggest li.active { background: #EEF3FB; }
+.stock-suggest .code { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 56px; }
+.stock-suggest .name { flex: 1 1 auto; color: var(--fg); }
+.stock-suggest .tag { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; line-height: 16px; }
+.stock-status { margin: 4px 0 8px; font-size: 13px; color: var(--muted); min-height: 1.6em; }
+.stock-status.is-error { color: #7A1F1C; background: #FCE9E8; border-left: 4px solid var(--up); padding: 6px 10px; border-radius: 6px; }
+.stock-head { margin: 0 0 8px; }
+.stock-head .stock-code { font-variant-numeric: tabular-nums; }
+.stock-head .pos { color: var(--up); font-weight: 600; }
+.stock-head .neg { color: var(--down); font-weight: 600; }
+.chart-stock-price { height: 440px; }
+.chart-stock-dd { height: 200px; margin-top: 4px; }
+.stock-cards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.card-value.pos { color: var(--up); }
+.card-value.neg { color: var(--down); }
+.card-value.dim { color: #9CA3AF; }
+.year-chips { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: 4px 0 10px; }
+.year-chips span {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 9px;
+  background: #fff;
+}
+.year-chips span.pos { color: var(--up); }
+.year-chips span.neg { color: var(--down); }
+
+/* ---------- 汇总页：缩略图网格与离屏渲染台 ---------- */
+.summary-stage { position: absolute; left: -20000px; top: 0; width: 960px; overflow: hidden; }
+.summary-bar .panel-head { margin-bottom: 2px; }
+.summary-grid {
+  max-width: 1200px;
+  margin: 18px auto;
+  padding: 0 20px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.thumb { margin: 0; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px; }
+.thumb a { display: block; color: inherit; text-decoration: none; }
+.thumb img { display: block; width: 100%; height: auto; border-radius: 6px; border: 1px solid #F3F4F6; }
+.thumb figcaption { font-size: 13px; color: var(--muted); margin-top: 6px; }
+.thumb figcaption strong { color: var(--fg); font-weight: 600; }
+.thumb.is-error { color: #7A1F1C; background: #FCE9E8; }
+@media (max-width: 1199px) { .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 767px) { .summary-grid { grid-template-columns: minmax(0, 1fr); padding: 0 10px; margin: 12px auto; } }
+
 /* ---------- 窄屏 ---------- */
 @media (max-width: 768px) {
   :root { --header-h: 84px; }
@@ -306,6 +388,12 @@ table.data-table td.dim { color: #9CA3AF; }
   .chart-fundroll { height: 320px; }
   .chart-fundnav { height: 420px; }
   .chart-margin { height: 380px; }
+  .chart-stock-price { height: 340px; }
+  .chart-stock-dd { height: 160px; }
+  .stock-input { width: 100%; }
+  .stock-search { flex: 1 1 100%; }
+  .stock-suggest { min-width: 0; width: 100%; }
+  .stock-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .card-value { font-size: 19px; }
   .fg-big { font-size: 36px; }
   .tools-group { margin-right: 6px; }

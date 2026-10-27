@@ -2,11 +2,13 @@
 
 A 股长周期看板：Python 脚本抓公开数据算成静态 JSON，浏览器用 ECharts 渲染。在线版由 GitHub Actions 每个交易日自动刷数据并发布到 GitHub Pages；本地则 `make update` 刷数据、`make serve` 打开。
 
-目前（M0–M4）十五个面板：**宽基指数覆盖范围**（coverage）、**宽基指数全收益净值**（widebase）、**主要宽基指数估值分位**（valuation）、**股债性价比**（erp）、**指数收益来源拆解**（decomp）、**申万一级行业年度涨跌幅**（swheat）、**行业交易热度**（indheat）、**全市场成交金额与换手率**（turnover）、**市场趋势温度**（trend）、**恐贪指数**（feargreed）、**不同事物的增长**（growth）、**风格因子净值**（factors）、**基金指数滚动年化**（fundroll）、**投资者结构**（investors）、**抄底数学题**（loss）。
+目前（M0–M5）十六个面板：**宽基指数覆盖范围**（coverage）、**宽基指数全收益净值**（widebase）、**主要宽基指数估值分位**（valuation）、**股债性价比**（erp）、**指数收益来源拆解**（decomp）、**申万一级行业年度涨跌幅**（swheat）、**行业交易热度**（indheat）、**全市场成交金额与换手率**（turnover）、**市场趋势温度**（trend）、**恐贪指数**（feargreed）、**不同事物的增长**（growth）、**风格因子净值**（factors）、**基金指数滚动年化**（fundroll）、**投资者结构**（investors）、**个股走势图**（stock）、**抄底数学题**（loss），加一个把全部面板缩略图排成一页的**汇总页**（`summary.html`）。
 
 ## 在线版（GitHub Pages）
 
-地址：**https://vickingwu.github.io/ashare-board/** —— 浏览器直接打开，不用 clone、不用装 Python。
+地址：**https://vickingwu.github.io/ashare-board/** —— 浏览器直接打开，不用 clone、不用装 Python。汇总页：**https://vickingwu.github.io/ashare-board/summary.html**。
+
+个股走势图（stock）面板的数据不经过服务器：输入代码后浏览器直接向腾讯行情取日线，在页面里算牛熊阶段与回撤（见「数据源与口径」），所以站点仍然是纯静态的；代码联想表 `data/symbols.json` 由 ETL 从本地全市场日线库的清单生成。
 
 - 数据由 GitHub Actions 自动刷新，运行 `.github/workflows/update-and-deploy.yml`，抓数 → 把变化的 `data/*.json` 提交回 `main` → 重新发布页面；缓存命中时每次约 4–8 分钟（其中全市场日线库补 1 个交易日约 1 分钟）。定时安排是**四个时段（北京时间）**：交易日 **20:17** 主运行、**22:47** 重试 / 补齐、每天 **07:53** 兜底、交易日 **11:23** 补漏。之所以不在收盘后马上跑：各数据源的当日数据要到 16:40 之后才陆续发布（2026-10-20 实测：中债登 16:39–16:57、乐咕 17:25–17:45、Baostock 全市场日线 17:30–18:00、中证指数与申万 18:25–18:45，当日即可拿到），20:17 这次拿到当日全部来源的数据；22:47 补主运行时缺失或失败的源（暖缓存，约 3–4 分钟）；07:53 补按 T+1 公布的上交所两融余额和前夜迟到的源（申万偶有缺日）；11:23 只在前一天三次都没跑成时补回前一交易日。两个上午时段的注意点：日序列源（中证、申万、乐咕、中债登、Baostock）16:00 前按规则不取当日行，但缓存按「日」判断新鲜，所以 07:53 / 11:23 会把前一晚已抓过的序列再请求一遍（中证 26 条约 5 分钟，拿不到新行）；而 **coverage 读的是腾讯实时行情**，11:23 这次会发布一份当日 `coverage.json`，面板说明里标注「行情抓取于盘中 HH:MM，市值为盘中快照」，到 20:17 再被收盘值覆盖。**四个时段是有意冗余的**：GitHub 的定时任务不准时——实测 2026-10-20 → 10-26 的 8 次定时运行每次都延后 2.2–6.2 小时（12:30Z 那条 4.8–6.2 小时、23:30Z 那条 2.2–2.3 小时、10-20 当时的 08:40Z 那条 5.2 小时），GitHub 文档也说明负载高时排队的定时运行可能被整次丢掉，所以分钟数避开整点 / 半点的高峰并多排两次，任一时段没跑或跑失败都有后面的时段兜底；定时运行延迟几分钟到几小时是 GitHub 的行为，不是故障。周末 / 节假日的 07:53 是暖缓存空跑：各源没有新数据时不改写任何文件、没有可提交的变化，页面原样重发（静态面板 loss 的 `asOf` 是常量，不会因为运行日变化而被改写）。
 - 全市场日线库（trend / feargreed 两个面板的底层数据）：Actions 上的 `cache/market/` 放在 actions/cache 里；缓存丢失时从仓库里的种子 `state/market_seed.zip` 重建，再用 Baostock 的全市场单日横截面逐日补齐缺的交易日（每个交易日一次查询，runner 上 25–55 秒），每次运行最多补 `ASHARE_MARKET_BUDGET_MIN`（默认 18）分钟。没补完时两个面板照常出图并在「看板说明」里多一句「全市场日线库落后 N 个交易日」，下次运行接着补：trend 的 `asOf` 停在日线库的最后一天；feargreed 以中证全指的日历为轴，有分的子指标不足 4 个的末日综合分为空（页面显示 –，并标出有分的子指标个数）。逐只股票抓全史的冷启动不在 Actions 上跑（runner 上约 28 小时），只在本地做一次、以种子的形式提交。
@@ -34,7 +36,8 @@ git clone https://github.com/vickingwu/ashare-board.git
 cd ashare-board
 make setup     # 建 .venv 并安装 requests / xlrd / tzdata / baostock（连带 pandas、numpy，均为二进制 wheel，不需要编译）
 make update    # 抓数据、生成 data/*.json（首次约 20 分钟：申万行业全史约 13 分钟、中债登按年下载约 4 分钟、全市场日线库解种子并补齐 1–3 分钟；之后每次 1–3 分钟，主要是腾讯行情和 Baostock 当日横截面）
-make serve     # 启动本地服务，然后打开 http://localhost:8000/
+make serve     # 启动本地服务，然后打开 http://localhost:8000/ 与 http://localhost:8000/summary.html
+make test      # Python 离线单测；make test-js 跑浏览器端模块（日线取数拼接、牛熊引擎）的 node:test 单测，需要 Node ≥ 22
 ```
 
 仓库里已经带了一份 `data/*.json`，clone 下来直接 `make serve` 就能看，`make update` 只是把数据刷到最新。
@@ -99,24 +102,30 @@ ashare-board/
 │       ├── factors.py       # 面板：风格因子净值（红利 / 低波动 / 质量 / 动量 / 价值 / 成长 六条中证指数 + 中证全指基准，2005-01-04 起，紧凑 JSON）
 │       ├── fundroll.py      # 面板：基金指数滚动年化（中证偏股型基金指数 1 / 3 / 5 / 7 年滚动年化 + 对照序列，紧凑 JSON）
 │       ├── investors.py     # 面板：投资者结构（沪市两融 + 上交所每日概况 + 申万Ａ指 8 张卡片与两融日序列，紧凑 JSON）
+│       ├── symbols.py       # 面板：证券代码表（个股走势图的离线联想表：全市场日线库清单的代码 / 简称 + 手工维护的指数 / ETF 清单，不联网，STATIC，紧凑 JSON）
 │       └── loss.py          # 面板：抄底数学题（纯算术，STATIC）
 ├── web/
 │   ├── index.html           # 页面骨架（不含任何面板标记，面板由 JS 注册生成）
+│   ├── summary.html         # 汇总页：全部面板离屏渲染后导出缩略图网格，点缩略图回到对应面板，「全部导出」逐张下载
 │   ├── css/style.css
-│   ├── js/app.js            # 前端框架：注册表、导航、懒加载、新鲜度条、深链接、导出 PNG、配色表
+│   ├── js/app.js            # 前端框架：注册表、导航、懒加载、新鲜度条、深链接（可带查询串）、导出 PNG、配色表
+│   ├── js/summary.js        # 汇总页的流程：按注册顺序 loadPanel → exportPanel(倍率 2) → 缩略图；进度与耗时
 │   ├── js/lib/charts.js     # 面板共用的图表 / 表格小工具（归一、年化、对数轴、时间轴、区间底色、时间窗按钮、可排序表格、N 日涨幅 / 滚动均值 / RPS、热力图基础配置、下拉框、面包屑）
-│   ├── js/panels/*.js       # 每个面板一个模块
+│   ├── js/lib/kline.js      # 浏览器端取腾讯行情日线：640 行分页规划、两年窗口并行取数、重叠日拼接、盘中 K 线剔除、sessionStorage 会话缓存（纯函数可在 Node 里单测）
+│   ├── js/lib/bullbear.js   # 牛熊 / 回撤引擎：ZigZag 阶段、回撤与最大回撤、区间年化、多周期涨跌幅、分年涨跌幅（纯计算）
+│   ├── js/panels/*.js       # 每个面板一个模块；stock.js 是唯一不从 data/ 取走势数据的面板（data/symbols.json 只用于联想，日线由 kline.js 在浏览器里取）
 │   └── vendor/echarts.min.js
-├── data/                    # ETL 输出，入库（clone 下来即可直接看）；indheat / trend / feargreed / factors / fundroll / investors .json 是无缩进的紧凑 JSON（各 ≤ 1 MB）
+├── data/                    # ETL 输出，入库（clone 下来即可直接看）；indheat / trend / feargreed / factors / fundroll / investors / symbols .json 是无缩进的紧凑 JSON（各 ≤ 1 MB）
 ├── state/market_seed.zip    # 全市场日线库种子（每股最近 252 行 + 聚合 + 日历，≤ 15 MB），入库；Actions 与新 clone 的库由它初始化，只在本地 make market-seed 后手工更新
 ├── state/gold_seed.json     # 金价静态种子：2006-01 → 2016-11 的月均人民币金价（世界银行 × 中间价 × k），入库；只在 make gold-seed 重建时更新
 ├── cache/  logs/            # 运行期产物，不入库（cache/ca_bundle.pem 也在这里生成；cache/market/ 是全市场日线库，本地 full 形态约 215 MB）
-├── tests/                   # 离线单元测试（unittest），fixtures/ 是各接口的真实响应裁剪件（sws_* 申万接口、legulegu_sw_overview_trim.html 乐咕行业总览、bs_* Baostock、sse_* 上交所两融与每日概况、em_* 东方财富、sge_* 上金所、chinamoney_* / worldbank_* 金价种子）
+├── tests/                   # 离线单元测试（unittest，每个 ETL 模块一个 test_*.py，如 test_symbols.py 用假清单与 mock 的 ensure_store 测代码表），fixtures/ 是各接口的真实响应裁剪件（sws_* 申万接口、legulegu_sw_overview_trim.html 乐咕行业总览、bs_* Baostock、sse_* 上交所两融与每日概况、em_* 东方财富、sge_* 上金所、chinamoney_* / worldbank_* 金价种子、tencent_kline_* 腾讯日线页）
+├── tests/js/                # 浏览器端模块的 node:test 单测（test_kline.mjs 分页 / 拼接 / 编排，test_bullbear.mjs 引擎），make test-js
 ├── scripts/build_site.py    # 把 web/ + data/ 拼成 GitHub Pages 发布目录 _site/
 ├── scripts/diagnose_sources.py               # 数据源连通性探测（配 .github/workflows/diagnose-sources.yml 手动运行，看 runner 上各源的可达性与速度；--no-baostock 只测 HTTP 源）
 ├── .github/workflows/update-and-deploy.yml   # 交易日 20:17 / 22:47 / 11:23 与每天 07:53（北京时间）抓数、提交、发布到 Pages
 ├── .github/workflows/diagnose-sources.yml    # 手动触发的数据源探测（输入 http_only 跳过 Baostock）
-├── serve.py                 # 本地 HTTP 服务（web/ + /data/，只监听 127.0.0.1）
+├── serve.py                 # 本地 HTTP 服务（web/ + /data/，只监听 127.0.0.1；纯静态，没有服务端接口）
 ├── Makefile  requirements.txt  NOTICE.md
 ```
 
@@ -179,9 +188,11 @@ ashare-board/
 
 `investors.json.data`（紧凑 JSON）：`cards[]{key,label,value,unit,date,scope,note}`（顺序 `marginTotal` 沪市融资融券余额、`marginFin` 沪市融资余额、`marginRatio` 两融余额 ÷ 沪市 A 股流通市值 %、`sseNego` 沪市 A 股流通市值、`sseTurnover` 沪市 A 股当日换手率 %、`aMv` 全 A 流通市值（申万口径）、`aAmount` 全 A 成交额、`aTurnover20` 20 日均成交额 ÷ 流通市值 %；金额 亿元；`scope` 标明 沪市 / 沪市 A 股 / 全 A；当日概况缺失时 `marginRatio.value` 为 `null` 并在 `note` 里说明）、`chart{dates[],total[],rzye[],csiAll[]}`（沪市融资融券余额与融资余额日序列 2010-03-31 起、中证全指收盘对齐，缺失为 `null`）、`latest{date,total,rzye,ratioPct}`、`dropped[]{key,name,reason}`（新增投资者、公募基金规模、北向持股、深市两融：没有机器可读或可区间查询的来源）。
 
+`symbols.json.data`（紧凑 JSON，`STATIC`，个股走势图的离线联想表）：`columns`（固定 `["code", "name", "kind", "market", "out"]`）、`rows[]`（数组的数组，每行 5 列：6 位代码、简称（没有则 `null`）、`kind` 为 `stock` / `index` / `etf`、`market` 为 `sh` / `sz` / `bj`、`out` 退市日或 `null`；先全部股票按市场、代码排序，再手工清单里的 16 个指数与 18 只 ETF）、`counts{stock,index,etf,delisted,nameMissing}`、`marketLastDate`。来源是全市场日线库清单（Baostock 证券资料，含已退市 339 只），构建时断言紧凑字节数 ≤ 400 KB（约 250 KB）且股票 ≥ 5,000；`asOf` = 清单的 `lastDate`。前端只用它做联想与市场推断，走势数据本身在浏览器里取。
+
 全市场日线库 `cache/market/`（不入库；本地、种子、Actions 三处格式相同）：`manifest.json`（`version`、`kind` full / tail、`start` 2004-01-01、`coldDone`、`lastDate`、`nStocks`、`skippedDays[]`、`codes{key:{name,ipo,out,status,first,last,n,lastClose}}`，`key` 形如 `sh600519`）、`agg.json`（每个交易日的计数：`dates[]`、`nTraded`、`n250`、`above250`、`n50`、`above50`、`adv`、`dec`、`flat`、`limitUp`、`limitDown`、`nLimitEligible`）、`calendar.json`（Baostock 交易日历，含未来约 60 天）、`progress.json`（只在冷启动期间存在）、`stocks/<key>.bin`（12 字节头 `ASHM` + 版本 + 行数，随后四段等长数组：`int32` 日期 `yyyymmdd`、`float32` 后复权收盘、`float32` 涨跌幅 %、`uint8` 标志位 bit0 = ST，每行 13 字节；只存有成交的日子）。`state/market_seed.zip` = 清单（`kind: "tail"`、`tailRows`、`exportedAt`）+ `agg.json` + `calendar.json` + 每只股票最后 252 行的 `stocks/*.bin`；导入后只能按日追加，不能重算全史聚合（`make market-rebuild` 要求 full 库）。
 
-## 面板清单与路线图
+## 面板清单
 
 | 里程碑 | 面板 | 状态 | 口径一句话 |
 |---|---|---|---|
@@ -199,8 +210,12 @@ ashare-board/
 | M4 | factors 风格因子净值 | ✅ | 红利 H00922 / 低波动 930847 / 质量 931156 / 动量 H20260 / 价值 H20356 / 成长 H20355 六条中证指数自 2005-01-04 归一，第二图为相对中证全指（同口径 全收益 ÷ 全收益、价格 ÷ 价格）的相对强弱 |
 | M4 | fundroll 基金指数滚动年化 | ✅ | 中证偏股型基金指数 930950 的 1 / 3 / 5 / 7 年（252 / 756 / 1260 / 1764 个交易日）滚动年化，附偏股 / 非纯债债基 / 沪深300全收益 / 中证A500 自选起点归一对照 |
 | M4 | investors 投资者结构 | ✅ | 沪市融资融券余额与融资余额（上交所，T+1）、两融 ÷ 沪市 A 股流通市值、沪市 A 股流通市值与换手（上交所每日概况）、全 A 流通市值 / 成交额 / 20 日均换手（申万口径）八张卡片 + 两融日序列叠加中证全指 |
+| M5 | stock 个股走势图 | ✅ | 任意 A 股 / ETF / 指数：浏览器直接取腾讯行情日线（股票 / ETF 默认后复权、可切前复权，指数无复权，2005 起或上市日起），对数价格 + 区间年化 + ZigZag 牛熊阶段底色、距前高回撤与最大回撤、阶段表、1 周 … 10 年与全程的多周期涨跌幅、分年涨跌幅；时间窗 全部 / 20 / 10 / 5 / 3 / 1 年，阈值 20 / 30 / 40 %；深链接 `#panel-stock?s=sh600519&r=10y&th=0.2&adj=hfq` |
+| M5 | symbols 证券代码表（`data/symbols.json`，个股面板的离线联想表） | ✅ | 全市场日线库清单的 5,564 个沪深 A 股代码 / 简称（含已退市）+ 手工维护的 16 个指数与 18 只 ETF，紧凑 JSON 约 250 KB，不联网 |
+| M5 | 汇总页 `summary.html` | ✅ | 14 个面板（不含要输入的 stock 与纯表格的 loss）在离屏渲染台里按注册顺序渲染并走导出流程（倍率 2）生成缩略图网格（≥ 1200px 三列、≥ 768px 两列、更窄一列），点缩略图回到对应面板；「全部导出」逐张下载 14 张 PNG |
 | M0 | loss 抄底数学题 | ✅ | 纯算术：亏多少要涨多少回本 |
-| M5 | 工具：个股四面板走势图 `/api/chart`（matplotlib）、汇总页 | 未实现（`serve.py` 目前对 `/api/chart` 返回 501） | |
+
+后续可选（都不是承诺）：个股面板加周线 / 月线视图切换；代码表补全部场内 ETF 与北交所代码（需要一个可缓存的清单来源）；汇总页支持只重新生成某一张；两只证券同窗口的净值对比；阶段表导出 CSV。
 
 ## 数据源与口径
 
@@ -242,6 +257,8 @@ ashare-board/
 - **金价静态种子 `state/gold_seed.json`（growth 的金价 2006-01 → 2016-11）**：上金所只回看 10 年，更早的月均价由两个公开来源拼成并**一次性入库**：世界银行 Pink Sheet `CMO-Historical-Data-Monthly.xlsx`（`Monthly Prices` 表的 `Gold ($/troy oz)` 列，月均美元金价）× 中国货币网 USD/CNY 中间价月均（`POST https://www.chinamoney.com.cn/ags/ms/cm-u-bk-ccpr/CcprHisNew`，按年取，`Referer: https://www.chinamoney.com.cn/chinese/bkccpr/`）÷ 31.1034768 克/盎司，再乘以拼接系数 `k` = 两段在重叠期 2016-12 → 2024-12（97 个月）上「上金所月均 ÷ 换算价」的几何均值（当前 1.008273，即上金所比国际价换算高约 0.8 %）。xlsx 用标准库 `zipfile` + `xml.etree` 解析，不加依赖。重建：`make gold-seed`（= `python -m etl.sources.gold_history --build-seed`，约 21 次请求），然后 `git add state/gold_seed.json`。运行时只读种子、只抓上金所。
 - **上交所 每日概况（investors 的沪市 A 股流通市值 / 成交额）**：`GET https://query.sse.com.cn/commonQuery.do?sqlId=COMMON_SSE_SJ_GPSJ_CJGK_MRGK_C&PRODUCT_CODE=01,02,03,11,17&type=inParams&SEARCH_DATE=YYYY-MM-DD&_=<毫秒>`，`Referer: https://www.sse.com.cn/`；`result[]{PRODUCT_CODE, TRADE_DATE, LIST_NUM, TOTAL_VALUE, NEGO_VALUE, TRADE_AMT, …}`（亿元，字符串）。沪市 A 股 = 代码 01 + 03 + 11 的合计。按日期缓存 `cache/sse/overview_YYYYMMDD.json`（当天尚未发布时存空标记，16:00 后抓到的当天不再重问），每次运行只问两融序列最后一天那一个日期（最多 1 次请求），拿不到就回退到最近有数据的一天并在卡片 `note` 里注明。
 - **中证风格与基金指数代码（factors / fundroll）**：全收益代码以 `H` 开头（`000xxx → H00xxx`、`H3xxxx → H2xxxx`），但 `93xxxx` 系列在 index-perf 接口上**没有全收益代码**（`H30847` / `H31156` 返回空），所以低波动 930847 与质量 931156 用价格指数、其余四个因子用全收益；相对强弱严格同口径（全收益 ÷ H00985、价格 ÷ 000985），面板说明里标出两条价格指数不含股息。基金指数（`930950` 偏股、`930897` 非纯债债基、`H11021` 股票基金、`H11022` 混合基金、`H11023` 债券基金）是中证指数公司按基金复权单位净值编制的公开指数；中证没有「偏债型基金指数」，用非纯债债券型基金指数近似并如实标注。
+- **个股日线（stock，浏览器端，不经 ETL）**：腾讯行情 `GET https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=<sym>,day,<start>,<end>,<count>,<fq>`，`sym` 形如 `sh600519` / `sz000001` / `sh000300`（指数）/ `sh510300`（ETF），`fq` 为 `hfq` 后复权、`qfq` 前复权、空 不复权。响应 JSON（`Content-Type` 却是 `text/html`，所以按文本取回再 `JSON.parse`）：`data.<sym>.hfqday | qfqday | day` 是行数组 `[日期, 开, 收, 高, 低, 量(, 分红送转说明)]`，键名按复权方式变化、**指数永远只有 `day`**；`data.<sym>.qt.<sym>` 是行情数组（`[1]` 名称、`[3]` 最新价、`[30]` 行情时间 `YYYYMMDDHHmmss`），所以不需要再请求 `qt.gtimg.cn`。响应带 `Access-Control-Allow-Origin: *`（2026-10-27 用 `Origin: https://vickingwu.github.io` 探测 20 次全部如此，无 `Vary: Origin`），因此页面直接 `fetch`，不用 JSONP（`?_var=xxx` 会返回 `xxx={…}` 的 JS，`kline.js` 里保留为备用通道 `TRANSPORT = 'script'`，只在线上出现 CORS 拦截时切换）。`count` 上限 **640 行**（`count=2000` 仍只回 640 + 当日），所以一次查询 = 1 次最新页（不带起止，含当日盘中 K 线）+ 从 2005-01-01（或上市日，取晚者）起的**两年固定日历窗口**（`2005-01-01..2007-01-16`、`2007-01-01..2009-01-16` …，相邻窗口重叠 15 天；一个两年窗口约 490 行，不会被截断），窗口从新到旧每批 2 路并行、批间停 250 ms，整个窗口为空（上市前）就不再往前；一只 2005 年前上市的股票 1 + 10 = 11 次请求、约 5 秒，2012 年上市的 ETF 1 + 7 次。相邻窗口按重叠日的 收盘(新) ÷ 收盘(旧) 取中位数拼接：偏离 1 超过 1e-6 就把旧窗口整体乘上去（后复权基准以最新页为准；探测到的页间比值都是精确的 1.0，但分红送转后不同页的复权因子可能不同，所以保留校正），没有重叠日的（跨窗口停牌）直接相接。最新页里当日的那一行在收盘前是盘中值：行情时间 `[30]` 与最后一行同一天且早于 15:00:00 时丢掉它，不依赖本机时钟。不存在的代码返回 `code: 0` 且 `day: []`（不是错误），面板显示「没有找到该代码的日线数据」；`932000`（中证2000）就是这种情况。腾讯的 WAF 对同一 IP 短时间内的突发请求返回 **501**（无 CORS 头，浏览器里表现为 CORS 错误；2026-10-27 本机连续多次整段查询约 75 次请求后触发，两分钟后恢复），所以失败只在 1.5 秒后重试一次，仍失败就提示稍后再查。结果按 `symbol + 复权` 存在 `sessionStorage`（每只约 100 KB，只在本标签页会话内有效，不写任何服务器）；切换时间窗 / 阈值不再请求。腾讯的联想接口 `smartbox.gtimg.cn/s3/?v=2&q=茅台&t=all` 能返回 `v_hint="sh~600519~贵州茅台~gzmt~GP-A"`，但**没有 `Access-Control-Allow-Origin`**，页面无法直接请求（脚本注入虽可行，但每敲一个字远程查一次不礼貌），所以联想完全离线、走 `data/symbols.json`。
+- **证券代码表（symbols）**：不联网。`etl/panels/symbols.py` 读全市场日线库清单 `cache/market/manifest.json`（`codes{key:{name, out, …}}`，Baostock 证券资料，含已退市）生成全部沪深 A 股的代码 / 简称 / 退市日，再拼上模块内手工维护的 `EXTRA`（16 个指数 + 18 只 ETF，腾讯写法 `sh000300` / `sz399006` / `sh510300`）；`asOf` 取清单的 `lastDate`，因为面板按字母序构建、`symbols` 排在更新日线库的 `trend` 之前，同一次运行里它可能比日线库的最终日期早一个交易日，不影响内容。北交所代码不在 Baostock 证券资料里，故不在表中，面板里可直接输入 6 位数字（4 / 8 开头按 `bj`）。
 - 抓取策略：单并发；同一主机两次请求间隔 ≥ 0.5 秒（腾讯 0.3 秒，**中证指数官网 12 ± 1 秒**（随机抖动）——其 index-perf 接口的限流是约 100 秒窗口内的**突发计数**（第 13 个左右的请求起 HTTP 403，封 90–210 秒），与 2–6 秒的间隔无关：2026-10-21 本机与 GitHub runner 都在 8 秒内 12 个小增量请求后第 13 个起 403；2026-10-23 runner 2 秒间隔 12 个之后隔 76 秒的第 13 个仍 403，本机 2 秒间隔第 16 个全史请求 403；2026-10-26 本机 3 ± 1 秒第 15 个（+40 秒）、5 ± 1 秒第 13 个（+69 秒）都 403 并各多等 210 秒，而 10 ± 1 秒与 12 ± 1 秒的 26 条增量全部通过——12 秒让 12 个请求至少跨 121 秒，26 条序列约 5 分钟，比 5 秒 + 一次封禁更快也更礼貌；2026-10-24 早上 runner 从第一个请求起就连续 `Connection reset by peer`，是 IP 级封禁；申万 0.8 秒，乐咕、中债登、上交所、东方财富、上金所、中国货币网、世界银行 1 秒）；失败指数退避重试 5 次（2→4→8→16 秒）；普通浏览器 UA。**中证指数日行情另有长退避与熔断**：403 / 429 / 5xx / 连接重置 / 超时按 30 → 60 → 120 → 240 秒等待再试（共 5 次，约 7.5 分钟），一条序列用完退避仍失败则**本轮**不再请求中证（后续依赖中证的面板直接报「暂不可达」、按失败隔离保留旧 JSON），避免逐条再等 7.5 分钟；编排器在全部面板跑完后暂停 60 秒，关掉熔断，对网络类失败的面板再构建一轮。整段运行里中证一直不可达的最坏情形是两轮各付一次退避，约 17 分钟。冷启动（`cache/` 为空）约 134 + 37 + 4 + 11 + 29 + 1 + 1 次请求、约 22 分钟：M0/M1 部分 134 次约 5 分钟（腾讯行情 86 批、中证成分 .xls 6 个、指数日行情 15 条、乐咕 1 页 + 5 个指数、中债登 21 个年份），申万 36 次（列表 1 + 一级 23 段 + 二级 10 段 + Ａ指分析 1 + 日线 1）+ 乐咕行业总览 1 次约 5–13 分钟（取决于申万当时的响应速度，实测 4.5 分钟到 13 分钟都有），上交所两融 3 页 + 全市场日线库从种子解出后每个缺失交易日 1 次 Baostock 查询（1–3 分钟），M4 新增中证日行情 11 条（六个因子 + 五个基金指数，12 秒间隔约 2.2 分钟）+ 东方财富 29 页（M2 1 + GDP 1 + 70 城 27）+ 上金所 1 次 + 上交所每日概况 1 次。之后同一天重跑申万、乐咕、上交所、Baostock、东方财富、上金所 0 次请求（每日概况最多 1 次）；次日增量 +4 次申万（一级窗口、二级窗口、Ａ指分析窗口、Ａ指日线全量）+ 中证 26 条小增量 + 上交所两融 1 次 + 每日概况 1 次 + Baostock 1 次横截面；乐咕行业总览每 30 天 1 次；东方财富每月 ≤ 3 次（20 日后）、上金所每月 1 次（1 日后）。逐只抓个股全史的 Baostock 查询只发生在 `make market-cold`。
 
 ## 排错
@@ -254,9 +271,14 @@ ashare-board/
 | 公司网络需要代理 | `export HTTPS_PROXY=http://host:port` 后再 `make update`（requests 会自动读取） |
 | Python 版本 | 3.11–3.14；requests / xlrd / tzdata 是纯 Python，baostock 依赖 pandas / numpy（二进制 wheel，只发到 3.11 及以上，无需编译） |
 | macOS 上 `make setup` 装 pandas 失败（找不到 wheel / 开始编译） | 系统 `python3` 太老（3.9 / 3.10）。`brew install python@3.13`（或 3.12）后删掉 `.venv`，用 `python3.13 -m venv .venv && .venv/bin/pip install -r requirements.txt` 重建 |
-| 自测失败隔离 | `ASHARE_FORCE_FAIL=erp make update`：erp 会被强制抛错、保留旧文件，其它十四个面板照常成功，退出码 0；页面上 erp 显示上一版数据并带黄色徽标 |
-| Windows | 没有 `make` 时直接运行：`.venv\Scripts\python.exe etl\build_data.py`、`.venv\Scripts\python.exe serve.py 8000`、`.venv\Scripts\python.exe -m unittest discover -s tests -v`；8000 被占用时换个端口，如 `serve.py 8010` |
+| 自测失败隔离 | `ASHARE_FORCE_FAIL=erp make update`：erp 会被强制抛错、保留旧文件，其它十五个面板照常成功，退出码 0；页面上 erp 显示上一版数据并带黄色徽标 |
+| Windows | 没有 `make` 时直接运行：`.venv\Scripts\python.exe etl\build_data.py`、`.venv\Scripts\python.exe serve.py 8000`、`.venv\Scripts\python.exe -m unittest discover -s tests -v`、`node --test "tests/js/**/*.mjs"`；8000 被占用时换个端口，如 `serve.py 8010` |
 | 页面顶部提示「无法读取 data/manifest.json」 | 还没跑过 `make update`，或 serve.py 不是在仓库根目录启动的 |
+| 个股面板提示「腾讯行情接口暂时不可达」 | 浏览器到 `web.ifzq.gtimg.cn` 的请求失败：网络不通、公司代理拦截 `*.gtimg.cn`，或短时间内查询太多触发腾讯 WAF 的 501（控制台会看到 CORS 报错，因为 501 页没有 `Access-Control-Allow-Origin`）。等一两分钟再查；浏览器控制台里能看到具体哪一次请求失败。若某个网络环境下腾讯长期不给 CORS 头，可把 `web/js/lib/kline.js` 里的 `TRANSPORT` 改成 `'script'` 走 `?_var=` 脚本注入通道 |
+| 个股面板提示「没有找到 … 的日线数据」 | 代码不存在、市场前缀推断错了（6 位数字按首位推断：5 / 6 / 9 沪、4 / 8 北、其余深，可直接输入 `sh000001` 这样的带前缀写法）、腾讯不提供该代码（如中证2000 `932000`）；北交所代码未在腾讯接口上验证过 |
+| 个股面板的联想列表为空 | `data/symbols.json` 没有生成或为旧版：`make update-only P=symbols`（不联网，1 秒）；不在表里的代码仍可直接输入 6 位数字查询 |
+| 汇总页「全部导出」只下载了一张 | 浏览器拦了多文件下载：地址栏右侧会出现「允许下载多个文件」的提示，允许后再点一次 |
+| 想在 ETL 里用 `qt.gtimg.cn` / `smartbox.gtimg.cn` 的返回 | 两者是 GBK 文本（`qt` 带 CORS 头、`smartbox` 不带）；本仓库的浏览器端不请求它们。ETL 里的腾讯总市值接口已经按 GBK 解码，浏览器里要用就 `new TextDecoder('gbk').decode(await r.arrayBuffer())` |
 | 乐咕 403 / 日志「乐咕页面没有 _csrf」 | 被乐咕的防护拦了（换了网络环境、短时间请求过多），或页面改版。先等几分钟或次日再跑；检查 `Referer` 是否仍是 `https://legulegu.com/stockdata/sz50-ttm-lyr`、`token` 是否为北京日期的 md5。期间面板自动回退到中证 `peg`（面板说明里会写「乐咕不可用，已回退」），不会报错 |
 | 乐咕返回空数据（日志「乐咕无此指数」） | 正常：乐咕只覆盖上面列出的 12 个指数，其余本来就走中证 `peg` |
 | 中债登超时 / 很慢 | 接口本身每年 5–13 秒，超时 120 秒后会重试。按年缓存在 `cache/chinabond/`，重跑只补缺的年份，不会从头下载 |
@@ -278,7 +300,7 @@ ashare-board/
 | turnover 换手率 2011-01 → 2012-04 一段空白 | 申万Ａ指的流通市值在这段没有数据，换手率算不出来，成交额曲线照常；不用别的来源补 |
 | 日志「乐咕行业总览抓取失败 … 沿用 N 天前的父级映射」 | 乐咕页面暂时打不开或改版，indheat 用旧映射继续构建；申万行业分类很少变，沿用几周没有影响。要强制刷新就删 `cache/legulegu/sw_overview.json` |
 | 日志「申万一级行业应为 31 个，拿到 N 个」 | 申万列表接口返回异常或行业分类版本变了；看 `cache/sws/list_一级行业.json`，确认是接口问题就删掉重跑 |
-| 日志「Baostock 登录失败」/「服务器连接失败」/「网络接收错误」（trend 与 feargreed 同时失败） | Baostock 服务器 `public-api.baostock.com:10030` 走裸 TCP，公司网络可能拦截该端口（HTTP 代理对它无效）；短时故障会自动重登 3 次。换网络或稍后重跑 `make update-only P=trend`（feargreed 复用同一次更新）；其它十三个面板不受影响 |
+| 日志「Baostock 登录失败」/「服务器连接失败」/「网络接收错误」（trend 与 feargreed 同时失败） | Baostock 服务器 `public-api.baostock.com:10030` 走裸 TCP，公司网络可能拦截该端口（HTTP 代理对它无效）；短时故障会自动重登 3 次。换网络或稍后重跑 `make update-only P=trend`（feargreed 复用同一次更新）；其它十四个面板不受影响 |
 | 日志「Baostock 没有 YYYY-MM-DD 的全市场数据」 | 某个过去的交易日 Baostock 返回 0 行。通常是对方补数延迟，下次运行自动重试。确认它永远缺这一天时跳过——代价是所有股票的后复权链都少了这一天的涨跌（之后的站上均线比例略有漂移），`manifest.skippedDays` 会记下来。本地：`.venv/bin/python -m etl.market_state --skip-day YYYY-MM-DD`。**Actions 上**（库在 actions/cache 里，本地跳过不会传过去）：Actions → update-and-deploy → Run workflow，`skip_days` 填该日期（多日用逗号分隔），它作为 `ASHARE_MARKET_SKIP_DAYS` 让这次运行把那一天记入 `skippedDays` 并继续补后面的交易日，之后的定时运行不再重试它。另一条路是本地跳过后 `make market-seed` 提交新种子并在 Actions → Caches 里删掉 `etl-cache-*`，让下次运行从新种子重建 |
 | 日志「… 追加日期 YYYYMMDD 不大于已有最后一行」（trend / feargreed 失败） | 旧版本在写一天的途中被打断后会一直报这个；现在写入是幂等的（已写的行复用，日志「复用 N 行」），正常不会再出现。若仍出现，说明股票文件与清单彻底不一致：`make clean-cache-market && make update` 从种子重建 |
 | 日志「… 已有行与重算不一致」 | 某只股票文件里最后一行的日期已是今天，但收盘与按清单 `lastClose` 续链的结果对不上（库被别的进程改过、或两次运行之间 Baostock 修订了昨收）。`make clean-cache-market && make update` 从种子重建 |
@@ -310,8 +332,9 @@ ashare-board/
      }
    });
    ```
-   然后在 `web/index.html` 的 `<head>` 里追加一行 `<script defer src="js/panels/<id>.js"></script>`（注册顺序 = 页面顺序）。
+   然后在 `web/index.html` 的 `<head>` 里追加一行 `<script defer src="js/panels/<id>.js"></script>`（注册顺序 = 页面顺序）；有图的面板同时加进 `web/summary.html` 的脚本列表，汇总页才会给它出缩略图。
    归一、年化、对数轴配置、时间窗按钮、可排序表格、N 日涨幅 / 滚动均值 / RPS / 分位、热力图基础配置（`heatmapBase`）、下拉框（`selectControl`）、面包屑（`crumbs`）等已有现成函数在 `web/js/lib/charts.js`（`window.AshareCharts`），指数配色与语义色统一取 `ctx.palette`，面板里不要再写一套。
+   `ctx` 还有 `hashQuery()`（读 `#panel-<id>?k=v` 深链接的查询串）、`setHashQuery({...})`（用 `replaceState` 写回）、`setAsOf(text)`（改写「数据截至」行）；`render` 可多返回 `exportMeta()`（导出 PNG 的副标题 / 来源 / 截至日，数据不来自 `data/*.json` 的面板用）与 `onHashQuery(q)`（页面已打开时地址栏换成带查询串的深链接）。stock 面板是这些钩子的用例。
 3. 导出 PNG 只拼接 `render` 返回的 ECharts 实例；HTML 表格不进 PNG（M0 的 loss 面板因此没有导出按钮）。
 4. 需要指数 PE 时用 `etl/sources/pe_select.get_monthly_pe(code, name)`，它负责选来源、月末抽样和回退；需要指数日线用 `etl/sources/csindex_hist.get_index_history(code)`。
 5. 需要申万行业数据时：`etl/sources/sws.get_level_history(sws.LEVEL1 | sws.LEVEL2)` 返回 `{dates[], codes{code:{name,close[],amtShare[],mv[],turnoverSw[]}}}`（全史增量缓存，列与 `dates` 等长、无数据处为 `None`，先用 `compute.drop_none` 再算）；`sws.get_index_list(sws.LEVEL1)` 给 31 个一级的权威名单；`sws.get_a_index()` 给申万Ａ指的 `dates / close / amount / volume / mv / turnoverSw`；二级→一级父级用 `etl/sources/legulegu.get_sw_parent_map()['level2'][code]['parent']`；煤炭等起点特殊的代码先过 `sws.cut_series_start(code, dates, values)`。

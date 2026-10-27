@@ -1,5 +1,5 @@
 # A股看板 —— macOS 常用命令（需要 python3 ≥ 3.11，见 setup；Windows 请直接用 .venv\Scripts\python.exe 运行同名脚本）
-.PHONY: setup update update-only test serve site clean-cache clean-cache-quotes clean-cache-sws \
+.PHONY: setup update update-only test test-js serve site clean-cache clean-cache-quotes clean-cache-sws \
         market-cold market-rebuild market-seed market-status clean-cache-market gold-seed
 
 PY := .venv/bin/python
@@ -17,6 +17,10 @@ update-only:
 
 test:
 	$(PY) -m unittest discover -s tests -v
+
+# 浏览器端模块（web/js/lib/kline.js 日线取数与拼接、bullbear.js 牛熊引擎）的离线单测，需要 Node ≥ 22（内置 node:test，不装 npm 包）
+test-js:
+	node --test "tests/js/**/*.mjs"
 
 serve:
 	python3 serve.py 8000
