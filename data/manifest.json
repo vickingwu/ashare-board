@@ -1,18 +1,18 @@
 {
- "generated": "2026-10-27T02:47:06+08:00",
+ "generated": "2026-10-27T10:18:00+08:00",
  "panels": {
   "coverage": {
    "ok": true,
    "asOf": "2026-10-26",
-   "generated": "2026-10-27T02:45:34+08:00",
+   "generated": "2026-10-27T10:17:55+08:00",
    "error": null,
-   "durationSec": 33.9,
+   "durationSec": 0.1,
    "static": false
   },
   "loss": {
    "ok": true,
    "asOf": "2026-10-27",
-   "generated": "2026-10-27T02:46:58+08:00",
+   "generated": "2026-10-27T10:17:55+08:00",
    "error": null,
    "durationSec": 0.0,
    "static": true
@@ -20,73 +20,73 @@
   "decomp": {
    "ok": true,
    "asOf": "2026-09-30",
-   "generated": "2026-10-27T02:45:56+08:00",
+   "generated": "2026-10-27T10:17:55+08:00",
    "error": null,
-   "durationSec": 22.2,
+   "durationSec": 0.0,
    "static": false
   },
   "erp": {
    "ok": true,
    "asOf": "2026-10-26",
-   "generated": "2026-10-27T02:46:08+08:00",
+   "generated": "2026-10-27T10:17:55+08:00",
    "error": null,
-   "durationSec": 12.0,
+   "durationSec": 0.0,
    "static": false
   },
   "valuation": {
    "ok": true,
    "asOf": "2026-10-26",
-   "generated": "2026-10-27T02:47:04+08:00",
+   "generated": "2026-10-27T10:18:00+08:00",
    "error": null,
-   "durationSec": 4.7,
+   "durationSec": 4.3,
    "static": false
   },
   "widebase": {
-   "ok": false,
-   "asOf": "2026-10-22",
-   "generated": "2026-10-23T13:55:48+08:00",
-   "error": "PanelError: HTTP 403 https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000510&startDate=20261022&endDate=20261027",
-   "durationSec": 2.0,
+   "ok": true,
+   "asOf": "2026-10-26",
+   "generated": "2026-10-27T10:18:00+08:00",
+   "error": null,
+   "durationSec": 0.1,
    "static": false
   },
   "indheat": {
    "ok": true,
    "asOf": "2026-10-23",
-   "generated": "2026-10-27T02:46:58+08:00",
+   "generated": "2026-10-27T10:17:55+08:00",
    "error": null,
-   "durationSec": 3.6,
+   "durationSec": 0.2,
    "static": false
   },
   "swheat": {
    "ok": true,
    "asOf": "2026-10-23",
-   "generated": "2026-10-27T02:46:59+08:00",
+   "generated": "2026-10-27T10:17:56+08:00",
    "error": null,
-   "durationSec": 0.8,
+   "durationSec": 0.2,
    "static": false
   },
   "turnover": {
    "ok": true,
    "asOf": "2026-10-23",
-   "generated": "2026-10-27T02:46:59+08:00",
+   "generated": "2026-10-27T10:17:56+08:00",
    "error": null,
-   "durationSec": 0.1,
+   "durationSec": 0.0,
    "static": false
   },
   "feargreed": {
    "ok": true,
    "asOf": "2026-10-26",
-   "generated": "2026-10-27T02:46:54+08:00",
+   "generated": "2026-10-27T10:17:55+08:00",
    "error": null,
-   "durationSec": 46.4,
+   "durationSec": 0.2,
    "static": false
   },
   "trend": {
    "ok": true,
    "asOf": "2026-10-26",
-   "generated": "2026-10-27T02:46:59+08:00",
+   "generated": "2026-10-27T10:17:56+08:00",
    "error": null,
-   "durationSec": 0.4,
+   "durationSec": 0.2,
    "static": false
   }
  }
