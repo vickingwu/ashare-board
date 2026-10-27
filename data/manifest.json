@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-27T15:13:58+08:00",
+ "generated": "2026-10-27T17:07:38+08:00",
  "panels": {
   "coverage": {
    "ok": true,
@@ -22,7 +22,7 @@
    "asOf": "2026-09-30",
    "generated": "2026-10-27T10:17:55+08:00",
    "error": null,
-   "durationSec": 0.1,
+   "durationSec": 132.4,
    "static": false
   },
   "erp": {
@@ -30,7 +30,7 @@
    "asOf": "2026-10-26",
    "generated": "2026-10-27T10:17:55+08:00",
    "error": null,
-   "durationSec": 0.0,
+   "durationSec": 15.1,
    "static": false
   },
   "valuation": {
@@ -38,7 +38,7 @@
    "asOf": "2026-10-26",
    "generated": "2026-10-27T10:18:00+08:00",
    "error": null,
-   "durationSec": 0.0,
+   "durationSec": 13.7,
    "static": false
   },
   "widebase": {
@@ -46,7 +46,7 @@
    "asOf": "2026-10-26",
    "generated": "2026-10-27T10:18:00+08:00",
    "error": null,
-   "durationSec": 0.0,
+   "durationSec": 0.1,
    "static": false
   },
   "indheat": {
@@ -54,7 +54,7 @@
    "asOf": "2026-10-23",
    "generated": "2026-10-27T10:17:55+08:00",
    "error": null,
-   "durationSec": 0.2,
+   "durationSec": 15.5,
    "static": false
   },
   "swheat": {
@@ -62,7 +62,7 @@
    "asOf": "2026-10-23",
    "generated": "2026-10-27T10:17:56+08:00",
    "error": null,
-   "durationSec": 0.3,
+   "durationSec": 39.3,
    "static": false
   },
   "turnover": {
@@ -74,19 +74,19 @@
    "static": false
   },
   "feargreed": {
-   "ok": true,
+   "ok": false,
    "asOf": "2026-10-26",
    "generated": "2026-10-27T10:17:55+08:00",
-   "error": null,
-   "durationSec": 0.2,
+   "error": "PanelError: Baostock 登录失败 code=10002007 msg=网络接收错误。",
+   "durationSec": 6.7,
    "static": false
   },
   "trend": {
-   "ok": true,
+   "ok": false,
    "asOf": "2026-10-26",
    "generated": "2026-10-27T10:17:56+08:00",
-   "error": null,
-   "durationSec": 0.2,
+   "error": "PanelError: Baostock 登录失败 code=10002007 msg=网络接收错误。",
+   "durationSec": 0.0,
    "static": false
   },
   "growth": {
@@ -94,7 +94,7 @@
    "asOf": "2026-09-30",
    "generated": "2026-10-23T17:19:36+08:00",
    "error": null,
-   "durationSec": 38.1,
+   "durationSec": 20.4,
    "static": false
   },
   "factors": {
@@ -102,7 +102,7 @@
    "asOf": "2026-10-26",
    "generated": "2026-10-27T10:03:09+08:00",
    "error": null,
-   "durationSec": 62.3,
+   "durationSec": 61.7,
    "static": false
   },
   "fundroll": {
@@ -110,23 +110,23 @@
    "asOf": "2026-10-26",
    "generated": "2026-10-27T11:54:37+08:00",
    "error": null,
-   "durationSec": 58.5,
+   "durationSec": 63.6,
    "static": false
   },
   "investors": {
    "ok": true,
-   "asOf": "2026-10-23",
-   "generated": "2026-10-27T11:55:17+08:00",
+   "asOf": "2026-10-26",
+   "generated": "2026-10-27T17:05:39+08:00",
    "error": null,
-   "durationSec": 2.0,
+   "durationSec": 1.9,
    "static": false
   },
   "symbols": {
    "ok": true,
-   "asOf": "2026-10-22",
-   "generated": "2026-10-27T15:13:58+08:00",
+   "asOf": "2026-10-26",
+   "generated": "2026-10-27T17:06:18+08:00",
    "error": null,
-   "durationSec": 0.0,
+   "durationSec": 0.1,
    "static": true
   }
  }
