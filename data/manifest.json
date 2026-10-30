@@ -1,12 +1,12 @@
 {
- "generated": "2026-10-30T18:22:21+08:00",
+ "generated": "2026-10-31T02:06:27+08:00",
  "panels": {
   "coverage": {
    "ok": true,
-   "asOf": "2026-10-29",
-   "generated": "2026-10-30T02:28:27+08:00",
+   "asOf": "2026-10-30",
+   "generated": "2026-10-31T02:00:24+08:00",
    "error": null,
-   "durationSec": 0.1,
+   "durationSec": 35.1,
    "static": false
   },
   "loss": {
@@ -22,7 +22,7 @@
    "asOf": "2026-10-30",
    "generated": "2026-10-30T18:18:05+08:00",
    "error": null,
-   "durationSec": 132.9,
+   "durationSec": 132.3,
    "static": false
   },
   "erp": {
@@ -30,7 +30,7 @@
    "asOf": "2026-10-30",
    "generated": "2026-10-30T18:18:20+08:00",
    "error": null,
-   "durationSec": 14.9,
+   "durationSec": 13.2,
    "static": false
   },
   "valuation": {
@@ -38,7 +38,7 @@
    "asOf": "2026-10-30",
    "generated": "2026-10-30T18:22:21+08:00",
    "error": null,
-   "durationSec": 13.1,
+   "durationSec": 18.5,
    "static": false
   },
   "widebase": {
@@ -51,48 +51,48 @@
   },
   "indheat": {
    "ok": true,
-   "asOf": "2026-10-29",
-   "generated": "2026-10-30T02:33:08+08:00",
+   "asOf": "2026-10-30",
+   "generated": "2026-10-31T02:05:05+08:00",
    "error": null,
-   "durationSec": 15.2,
+   "durationSec": 4.5,
    "static": false
   },
   "swheat": {
    "ok": true,
-   "asOf": "2026-10-29",
-   "generated": "2026-10-30T02:33:09+08:00",
+   "asOf": "2026-10-30",
+   "generated": "2026-10-31T02:05:06+08:00",
    "error": null,
-   "durationSec": 6.7,
+   "durationSec": 1.1,
    "static": false
   },
   "turnover": {
    "ok": true,
-   "asOf": "2026-10-29",
-   "generated": "2026-10-30T02:33:09+08:00",
+   "asOf": "2026-10-30",
+   "generated": "2026-10-31T02:05:07+08:00",
    "error": null,
-   "durationSec": 0.0,
+   "durationSec": 0.1,
    "static": false
   },
   "feargreed": {
-   "ok": true,
+   "ok": false,
    "asOf": "2026-10-30",
    "generated": "2026-10-30T18:20:44+08:00",
-   "error": null,
-   "durationSec": 86.2,
+   "error": "PanelError: HTTP 403 https://query.sse.com.cn/marketdata/tradedata/queryMargin.do?isPagination=true&tabType=&stockCode=&beginDate=20261022&endDate=20261031&pageHelp.pageSize=2000&pageHelp.pageNo=1&pag",
+   "durationSec": 0.3,
    "static": false
   },
   "trend": {
    "ok": true,
    "asOf": "2026-10-30",
-   "generated": "2026-10-30T18:22:08+08:00",
+   "generated": "2026-10-31T02:05:07+08:00",
    "error": null,
-   "durationSec": 0.3,
+   "durationSec": 0.4,
    "static": false
   },
   "growth": {
    "ok": true,
    "asOf": "2026-10-31",
-   "generated": "2026-10-30T18:21:45+08:00",
+   "generated": "2026-10-31T02:05:01+08:00",
    "error": null,
    "durationSec": 0.0,
    "static": false
@@ -102,7 +102,7 @@
    "asOf": "2026-10-30",
    "generated": "2026-10-30T18:19:18+08:00",
    "error": null,
-   "durationSec": 57.8,
+   "durationSec": 61.0,
    "static": false
   },
   "fundroll": {
@@ -110,15 +110,15 @@
    "asOf": "2026-10-29",
    "generated": "2026-10-30T18:21:45+08:00",
    "error": null,
-   "durationSec": 61.0,
+   "durationSec": 64.7,
    "static": false
   },
   "investors": {
-   "ok": true,
+   "ok": false,
    "asOf": "2026-10-29",
    "generated": "2026-10-30T18:22:01+08:00",
-   "error": null,
-   "durationSec": 0.2,
+   "error": "PanelError: HTTP 403 https://query.sse.com.cn/marketdata/tradedata/queryMargin.do?isPagination=true&tabType=&stockCode=&beginDate=20261022&endDate=20261031&pageHelp.pageSize=2000&pageHelp.pageNo=1&pag",
+   "durationSec": 1.0,
    "static": false
   },
   "symbols": {
