@@ -1,8 +1,8 @@
 {
  "panel": "valuation",
  "title": "主要宽基指数估值分位",
- "generated": "2026-11-03T05:47:10+08:00",
- "asOf": "2026-11-02",
+ "generated": "2026-11-03T19:14:34+08:00",
+ "asOf": "2026-11-03",
  "sources": [
   "乐咕乐股 legulegu.com（指数整体法滚动市盈率，月度）",
   "中证指数有限公司 csindex.com.cn（指数日行情 peg 字段）"
@@ -18,8 +18,8 @@
  "data": {
   "indexes": [
    {
-    "peNow": 12.73,
-    "peDate": "2026-11-02",
+    "peNow": 12.71,
+    "peDate": "2026-11-03",
     "sampleStart": "2005-04-29",
     "sampleEnd": "2026-10-30",
     "nMonths": 259,
@@ -561,14 +561,14 @@
     "fallback": false
    },
    {
-    "peNow": 22.11,
-    "peDate": "2026-11-02",
+    "peNow": 21.81,
+    "peDate": "2026-11-03",
     "sampleStart": "2007-01-31",
     "sampleEnd": "2026-10-30",
     "nMonths": 238,
-    "pctAll": 35.7,
-    "pct10y": 60.8,
-    "pct5y": 73.3,
+    "pctAll": 33.6,
+    "pct10y": 59.2,
+    "pct5y": 70.0,
     "min": 14.29,
     "max": 64.53,
     "median": 24.97,
@@ -1062,14 +1062,14 @@
     "fallback": false
    },
    {
-    "peNow": 24.69,
-    "peDate": "2026-11-02",
+    "peNow": 24.26,
+    "peDate": "2026-11-03",
     "sampleStart": "2014-10-31",
     "sampleEnd": "2026-10-30",
     "nMonths": 145,
-    "pctAll": 36.6,
-    "pct10y": 44.2,
-    "pct5y": 56.7,
+    "pctAll": 31.0,
+    "pct10y": 37.5,
+    "pct5y": 48.3,
     "min": 17.62,
     "max": 99.36,
     "median": 28.08,
@@ -1377,8 +1377,8 @@
     "fallback": false
    },
    {
-    "peNow": 13.78,
-    "peDate": "2026-11-02",
+    "peNow": 13.73,
+    "peDate": "2026-11-03",
     "sampleStart": "2007-01-31",
     "sampleEnd": "2026-10-30",
     "nMonths": 238,
@@ -1879,7 +1879,7 @@
    },
    {
     "peNow": 11.73,
-    "peDate": "2026-11-02",
+    "peDate": "2026-11-03",
     "sampleStart": "2005-01-31",
     "sampleEnd": "2026-10-30",
     "nMonths": 262,
@@ -2427,14 +2427,14 @@
     "fallback": false
    },
    {
-    "peNow": 16.32,
-    "peDate": "2026-11-02",
+    "peNow": 16.2,
+    "peDate": "2026-11-03",
     "sampleStart": "2011-09-29",
     "sampleEnd": "2026-10-30",
     "nMonths": 180,
-    "pctAll": 52.2,
-    "pct10y": 49.2,
-    "pct5y": 61.7,
+    "pctAll": 49.4,
+    "pct10y": 45.0,
+    "pct5y": 58.3,
     "min": 11.57,
     "max": 28.41,
     "median": 16.23,
@@ -2812,14 +2812,14 @@
     "fallback": false
    },
    {
-    "peNow": 52.81,
-    "peDate": "2026-11-02",
+    "peNow": 50.52,
+    "peDate": "2026-11-03",
     "sampleStart": "2020-07-31",
     "sampleEnd": "2026-10-30",
     "nMonths": 76,
-    "pctAll": 55.3,
+    "pctAll": 52.6,
     "pct10y": null,
-    "pct5y": 66.7,
+    "pct5y": 65.0,
     "min": 23.71,
     "max": 104.75,
     "median": 49.64,
@@ -2989,8 +2989,8 @@
     "fallback": false
    },
    {
-    "peNow": 35.57,
-    "peDate": "2026-11-02",
+    "peNow": 34.74,
+    "peDate": "2026-11-03",
     "sampleStart": "2023-06-30",
     "sampleEnd": "2026-10-30",
     "nMonths": 41,
@@ -3096,8 +3096,8 @@
     "fallback": false
    },
    {
-    "peNow": 14.41,
-    "peDate": "2026-11-02",
+    "peNow": 14.38,
+    "peDate": "2026-11-03",
     "sampleStart": "2024-09-30",
     "sampleEnd": "2026-10-30",
     "nMonths": 26,
@@ -3173,8 +3173,8 @@
     "fallback": false
    },
    {
-    "peNow": 8.69,
-    "peDate": "2026-11-02",
+    "peNow": 8.66,
+    "peDate": "2026-11-03",
     "sampleStart": "2013-12-31",
     "sampleEnd": "2026-10-30",
     "nMonths": 155,

@@ -1,12 +1,12 @@
 {
- "generated": "2026-11-03T05:47:10+08:00",
+ "generated": "2026-11-03T19:15:36+08:00",
  "panels": {
   "coverage": {
    "ok": true,
    "asOf": "2026-11-02",
    "generated": "2026-11-03T05:42:10+08:00",
    "error": null,
-   "durationSec": 31.3,
+   "durationSec": 0.1,
    "static": false
   },
   "loss": {
@@ -22,71 +22,71 @@
    "asOf": "2026-10-30",
    "generated": "2026-10-30T18:18:05+08:00",
    "error": null,
-   "durationSec": 132.6,
+   "durationSec": 134.9,
    "static": false
   },
   "erp": {
    "ok": true,
-   "asOf": "2026-11-02",
-   "generated": "2026-11-02T19:31:25+08:00",
+   "asOf": "2026-11-03",
+   "generated": "2026-11-03T19:08:26+08:00",
    "error": null,
-   "durationSec": 11.7,
+   "durationSec": 13.6,
    "static": false
   },
   "valuation": {
    "ok": true,
-   "asOf": "2026-11-02",
-   "generated": "2026-11-03T05:47:10+08:00",
+   "asOf": "2026-11-03",
+   "generated": "2026-11-03T19:14:34+08:00",
    "error": null,
-   "durationSec": 17.5,
+   "durationSec": 14.1,
    "static": false
   },
   "widebase": {
    "ok": true,
-   "asOf": "2026-11-02",
-   "generated": "2026-11-03T05:47:10+08:00",
+   "asOf": "2026-11-03",
+   "generated": "2026-11-03T19:14:34+08:00",
    "error": null,
    "durationSec": 0.1,
    "static": false
   },
   "indheat": {
    "ok": true,
-   "asOf": "2026-11-02",
-   "generated": "2026-11-02T19:36:13+08:00",
+   "asOf": "2026-11-03",
+   "generated": "2026-11-03T19:14:11+08:00",
    "error": null,
-   "durationSec": 3.8,
+   "durationSec": 21.9,
    "static": false
   },
   "swheat": {
    "ok": true,
-   "asOf": "2026-11-02",
-   "generated": "2026-11-02T19:36:20+08:00",
+   "asOf": "2026-11-03",
+   "generated": "2026-11-03T19:14:20+08:00",
    "error": null,
-   "durationSec": 0.8,
+   "durationSec": 8.4,
    "static": false
   },
   "turnover": {
    "ok": true,
-   "asOf": "2026-11-02",
-   "generated": "2026-11-02T19:36:20+08:00",
+   "asOf": "2026-11-03",
+   "generated": "2026-11-03T19:14:20+08:00",
    "error": null,
-   "durationSec": 0.0,
+   "durationSec": 0.1,
    "static": false
   },
   "feargreed": {
-   "ok": true,
+   "ok": false,
    "asOf": "2026-11-02",
    "generated": "2026-11-02T19:34:49+08:00",
-   "error": null,
-   "durationSec": 3.7,
+   "error": "PanelError: HTTP 403 https://query.sse.com.cn/marketdata/tradedata/queryMargin.do?isPagination=true&tabType=&stockCode=&beginDate=20261023&endDate=20261103&pageHelp.pageSize=2000&pageHelp.pageNo=1&pag",
+   "durationSec": 0.4,
    "static": false
   },
   "trend": {
    "ok": true,
-   "asOf": "2026-11-02",
-   "generated": "2026-11-02T19:36:20+08:00",
+   "asOf": "2026-11-03",
+   "generated": "2026-11-03T19:14:20+08:00",
    "error": null,
-   "durationSec": 0.3,
+   "durationSec": 0.4,
    "static": false
   },
   "growth": {
@@ -99,34 +99,34 @@
   },
   "factors": {
    "ok": true,
-   "asOf": "2026-11-02",
-   "generated": "2026-11-02T19:32:25+08:00",
+   "asOf": "2026-11-03",
+   "generated": "2026-11-03T19:09:28+08:00",
    "error": null,
-   "durationSec": 59.9,
+   "durationSec": 62.3,
    "static": false
   },
   "fundroll": {
    "ok": true,
-   "asOf": "2026-10-30",
-   "generated": "2026-11-02T10:54:04+08:00",
+   "asOf": "2026-11-02",
+   "generated": "2026-11-03T19:13:49+08:00",
    "error": null,
-   "durationSec": 69.1,
+   "durationSec": 60.6,
    "static": false
   },
   "investors": {
-   "ok": true,
+   "ok": false,
    "asOf": "2026-10-30",
    "generated": "2026-11-02T19:36:13+08:00",
-   "error": null,
-   "durationSec": 0.0,
+   "error": "PanelError: HTTP 403 https://query.sse.com.cn/marketdata/tradedata/queryMargin.do?isPagination=true&tabType=&stockCode=&beginDate=20261023&endDate=20261103&pageHelp.pageSize=2000&pageHelp.pageNo=1&pag",
+   "durationSec": 1.5,
    "static": false
   },
   "symbols": {
    "ok": true,
-   "asOf": "2026-11-02",
-   "generated": "2026-11-02T19:36:20+08:00",
+   "asOf": "2026-11-03",
+   "generated": "2026-11-03T19:14:20+08:00",
    "error": null,
-   "durationSec": 0.0,
+   "durationSec": 0.1,
    "static": true
   }
  }
