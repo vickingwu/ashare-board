@@ -1,12 +1,12 @@
 {
- "generated": "2026-11-09T21:17:14+08:00",
+ "generated": "2026-11-10T06:24:31+08:00",
  "panels": {
   "coverage": {
    "ok": true,
    "asOf": "2026-11-09",
-   "generated": "2026-11-09T11:04:49+08:00",
+   "generated": "2026-11-10T06:19:30+08:00",
    "error": null,
-   "durationSec": 0.1,
+   "durationSec": 34.0,
    "static": false
   },
   "loss": {
@@ -22,7 +22,7 @@
    "asOf": "2026-10-30",
    "generated": "2026-10-30T18:18:05+08:00",
    "error": null,
-   "durationSec": 133.7,
+   "durationSec": 131.2,
    "static": false
   },
   "erp": {
@@ -30,7 +30,7 @@
    "asOf": "2026-11-09",
    "generated": "2026-11-09T19:55:21+08:00",
    "error": null,
-   "durationSec": 13.2,
+   "durationSec": 12.5,
    "static": false
   },
   "valuation": {
@@ -38,7 +38,7 @@
    "asOf": "2026-11-09",
    "generated": "2026-11-09T20:37:32+08:00",
    "error": null,
-   "durationSec": 13.1,
+   "durationSec": 19.0,
    "static": false
   },
   "widebase": {
@@ -46,55 +46,55 @@
    "asOf": "2026-11-09",
    "generated": "2026-11-09T20:37:32+08:00",
    "error": null,
-   "durationSec": 0.1,
+   "durationSec": 0.0,
    "static": false
   },
   "indheat": {
-   "ok": false,
-   "asOf": "2026-11-06",
-   "generated": "2026-11-07T03:28:03+08:00",
-   "error": "PanelError: 重试 5 次仍失败 (HTTP 504) https://www.swsresearch.com/institute-sw/api/index_analysis/index_analysis_report/?page=1&page_size=10000&index_type=%E4%B8%80%E7%BA%A7%E8%A1%8C%E4%B8%9A&start_date=20",
-   "durationSec": 332.4,
+   "ok": true,
+   "asOf": "2026-11-09",
+   "generated": "2026-11-10T06:24:11+08:00",
+   "error": null,
+   "durationSec": 3.6,
    "static": false
   },
   "swheat": {
-   "ok": false,
-   "asOf": "2026-11-06",
-   "generated": "2026-11-07T03:28:04+08:00",
-   "error": "PanelError: 重试 5 次仍失败 (HTTP 504) https://www.swsresearch.com/institute-sw/api/index_analysis/index_analysis_report/?page=1&page_size=10000&index_type=%E4%B8%80%E7%BA%A7%E8%A1%8C%E4%B8%9A&start_date=20",
-   "durationSec": 331.2,
+   "ok": true,
+   "asOf": "2026-11-09",
+   "generated": "2026-11-10T06:24:11+08:00",
+   "error": null,
+   "durationSec": 0.6,
    "static": false
   },
   "turnover": {
-   "ok": false,
-   "asOf": "2026-11-06",
-   "generated": "2026-11-07T03:28:04+08:00",
-   "error": "PanelError: 重试 5 次仍失败 (HTTP 504) https://www.swsresearch.com/institute-sw/api/index_publish/trend/?swindexcode=801003&period=DAY",
-   "durationSec": 331.1,
+   "ok": true,
+   "asOf": "2026-11-09",
+   "generated": "2026-11-10T06:24:12+08:00",
+   "error": null,
+   "durationSec": 0.0,
    "static": false
   },
   "feargreed": {
-   "ok": false,
-   "asOf": "2026-11-06",
-   "generated": "2026-11-08T10:50:17+08:00",
-   "error": "PanelError: 重试 5 次仍失败 (HTTP 504) https://www.swsresearch.com/institute-sw/api/index_publish/trend/?swindexcode=801003&period=DAY",
-   "durationSec": 332.5,
+   "ok": true,
+   "asOf": "2026-11-09",
+   "generated": "2026-11-10T06:22:58+08:00",
+   "error": null,
+   "durationSec": 3.5,
    "static": false
   },
   "trend": {
-   "ok": false,
-   "asOf": "2026-11-06",
-   "generated": "2026-11-07T03:28:04+08:00",
-   "error": "PanelError: 重试 5 次仍失败 (HTTP 504) https://www.swsresearch.com/institute-sw/api/index_analysis/index_analysis_report/?page=1&page_size=10000&index_type=%E4%B8%80%E7%BA%A7%E8%A1%8C%E4%B8%9A&start_date=20",
-   "durationSec": 332.5,
+   "ok": true,
+   "asOf": "2026-11-09",
+   "generated": "2026-11-10T06:24:12+08:00",
+   "error": null,
+   "durationSec": 0.2,
    "static": false
   },
   "growth": {
-   "ok": false,
+   "ok": true,
    "asOf": "2026-10-31",
    "generated": "2026-11-01T10:45:43+08:00",
-   "error": "PanelError: 重试 5 次仍失败 (HTTP 504) https://www.swsresearch.com/institute-sw/api/index_publish/trend/?swindexcode=801003&period=DAY",
-   "durationSec": 331.1,
+   "error": null,
+   "durationSec": 0.0,
    "static": false
   },
   "factors": {
@@ -102,7 +102,7 @@
    "asOf": "2026-11-09",
    "generated": "2026-11-09T19:56:24+08:00",
    "error": null,
-   "durationSec": 63.4,
+   "durationSec": 61.2,
    "static": false
   },
   "fundroll": {
@@ -110,15 +110,15 @@
    "asOf": "2026-11-06",
    "generated": "2026-11-09T11:09:29+08:00",
    "error": null,
-   "durationSec": 60.1,
+   "durationSec": 68.8,
    "static": false
   },
   "investors": {
-   "ok": false,
+   "ok": true,
    "asOf": "2026-11-06",
-   "generated": "2026-11-08T10:51:29+08:00",
-   "error": "PanelError: 重试 5 次仍失败 (HTTP 504) https://www.swsresearch.com/institute-sw/api/index_publish/trend/?swindexcode=801003&period=DAY",
-   "durationSec": 331.1,
+   "generated": "2026-11-10T06:24:11+08:00",
+   "error": null,
+   "durationSec": 0.0,
    "static": false
   },
   "symbols": {
