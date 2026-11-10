@@ -1,12 +1,12 @@
 {
- "generated": "2026-11-10T19:33:05+08:00",
+ "generated": "2026-11-11T03:48:33+08:00",
  "panels": {
   "coverage": {
    "ok": true,
-   "asOf": "2026-11-09",
-   "generated": "2026-11-10T06:19:30+08:00",
+   "asOf": "2026-11-10",
+   "generated": "2026-11-11T03:42:25+08:00",
    "error": null,
-   "durationSec": 0.1,
+   "durationSec": 33.3,
    "static": false
   },
   "loss": {
@@ -22,7 +22,7 @@
    "asOf": "2026-10-30",
    "generated": "2026-10-30T18:18:05+08:00",
    "error": null,
-   "durationSec": 131.0,
+   "durationSec": 130.8,
    "static": false
   },
   "erp": {
@@ -30,7 +30,7 @@
    "asOf": "2026-11-10",
    "generated": "2026-11-10T19:29:18+08:00",
    "error": null,
-   "durationSec": 15.7,
+   "durationSec": 14.6,
    "static": false
   },
   "valuation": {
@@ -38,7 +38,7 @@
    "asOf": "2026-11-10",
    "generated": "2026-11-10T19:33:05+08:00",
    "error": null,
-   "durationSec": 15.4,
+   "durationSec": 18.7,
    "static": false
   },
   "widebase": {
@@ -54,7 +54,7 @@
    "asOf": "2026-11-10",
    "generated": "2026-11-10T19:32:48+08:00",
    "error": null,
-   "durationSec": 6.0,
+   "durationSec": 4.2,
    "static": false
   },
   "swheat": {
@@ -62,7 +62,7 @@
    "asOf": "2026-11-10",
    "generated": "2026-11-10T19:32:49+08:00",
    "error": null,
-   "durationSec": 0.7,
+   "durationSec": 0.8,
    "static": false
   },
   "turnover": {
@@ -70,15 +70,15 @@
    "asOf": "2026-11-10",
    "generated": "2026-11-10T19:32:50+08:00",
    "error": null,
-   "durationSec": 0.1,
+   "durationSec": 0.0,
    "static": false
   },
   "feargreed": {
-   "ok": true,
+   "ok": false,
    "asOf": "2026-11-10",
    "generated": "2026-11-10T19:31:41+08:00",
-   "error": null,
-   "durationSec": 82.5,
+   "error": "PanelError: HTTP 403 https://query.sse.com.cn/marketdata/tradedata/queryMargin.do?isPagination=true&tabType=&stockCode=&beginDate=20261102&endDate=20261111&pageHelp.pageSize=2000&pageHelp.pageNo=1&pag",
+   "durationSec": 0.3,
    "static": false
   },
   "trend": {
@@ -102,7 +102,7 @@
    "asOf": "2026-11-10",
    "generated": "2026-11-10T19:30:18+08:00",
    "error": null,
-   "durationSec": 60.6,
+   "durationSec": 62.4,
    "static": false
   },
   "fundroll": {
@@ -110,15 +110,15 @@
    "asOf": "2026-11-09",
    "generated": "2026-11-10T19:32:42+08:00",
    "error": null,
-   "durationSec": 61.1,
+   "durationSec": 70.1,
    "static": false
   },
   "investors": {
-   "ok": true,
+   "ok": false,
    "asOf": "2026-11-09",
    "generated": "2026-11-10T19:32:49+08:00",
-   "error": null,
-   "durationSec": 0.8,
+   "error": "PanelError: HTTP 403 https://query.sse.com.cn/marketdata/tradedata/queryMargin.do?isPagination=true&tabType=&stockCode=&beginDate=20261102&endDate=20261111&pageHelp.pageSize=2000&pageHelp.pageNo=1&pag",
+   "durationSec": 1.0,
    "static": false
   },
   "symbols": {
