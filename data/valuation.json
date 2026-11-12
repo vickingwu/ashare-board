@@ -1,8 +1,8 @@
 {
  "panel": "valuation",
  "title": "主要宽基指数估值分位",
- "generated": "2026-11-11T19:21:19+08:00",
- "asOf": "2026-11-11",
+ "generated": "2026-11-12T19:38:26+08:00",
+ "asOf": "2026-11-12",
  "sources": [
   "乐咕乐股 legulegu.com（指数整体法滚动市盈率，月度）",
   "中证指数有限公司 csindex.com.cn（指数日行情 peg 字段）"
@@ -18,13 +18,13 @@
  "data": {
   "indexes": [
    {
-    "peNow": 12.64,
-    "peDate": "2026-11-11",
+    "peNow": 12.6,
+    "peDate": "2026-11-12",
     "sampleStart": "2005-04-29",
     "sampleEnd": "2026-10-30",
     "nMonths": 259,
-    "pctAll": 52.5,
-    "pct10y": 61.7,
+    "pctAll": 51.4,
+    "pct10y": 60.8,
     "pct5y": 75.0,
     "min": 7.96,
     "max": 47.84,
@@ -561,13 +561,13 @@
     "fallback": false
    },
    {
-    "peNow": 22.94,
-    "peDate": "2026-11-11",
+    "peNow": 22.6,
+    "peDate": "2026-11-12",
     "sampleStart": "2007-01-31",
     "sampleEnd": "2026-10-30",
     "nMonths": 238,
-    "pctAll": 38.7,
-    "pct10y": 64.2,
+    "pctAll": 37.4,
+    "pct10y": 62.5,
     "pct5y": 75.0,
     "min": 14.29,
     "max": 64.53,
@@ -1062,14 +1062,14 @@
     "fallback": false
    },
    {
-    "peNow": 25.93,
-    "peDate": "2026-11-11",
+    "peNow": 25.43,
+    "peDate": "2026-11-12",
     "sampleStart": "2014-10-31",
     "sampleEnd": "2026-10-30",
     "nMonths": 145,
-    "pctAll": 44.1,
-    "pct10y": 53.3,
-    "pct5y": 70.0,
+    "pctAll": 40.7,
+    "pct10y": 49.2,
+    "pct5y": 63.3,
     "min": 17.62,
     "max": 99.36,
     "median": 28.08,
@@ -1377,8 +1377,8 @@
     "fallback": false
    },
    {
-    "peNow": 13.8,
-    "peDate": "2026-11-11",
+    "peNow": 13.72,
+    "peDate": "2026-11-12",
     "sampleStart": "2007-01-31",
     "sampleEnd": "2026-10-30",
     "nMonths": 238,
@@ -1878,14 +1878,14 @@
     "fallback": false
    },
    {
-    "peNow": 11.5,
-    "peDate": "2026-11-11",
+    "peNow": 11.55,
+    "peDate": "2026-11-12",
     "sampleStart": "2005-01-31",
     "sampleEnd": "2026-10-30",
     "nMonths": 262,
-    "pctAll": 63.0,
-    "pct10y": 84.2,
-    "pct5y": 91.7,
+    "pctAll": 64.5,
+    "pct10y": 87.5,
+    "pct5y": 96.7,
     "min": 7.01,
     "max": 47.29,
     "median": 10.77,
