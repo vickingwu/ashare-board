@@ -1,12 +1,12 @@
 {
- "generated": "2026-11-16T19:53:58+08:00",
+ "generated": "2026-11-17T06:04:38+08:00",
  "panels": {
   "coverage": {
    "ok": true,
    "asOf": "2026-11-16",
-   "generated": "2026-11-16T11:17:03+08:00",
+   "generated": "2026-11-17T05:59:32+08:00",
    "error": null,
-   "durationSec": 0.1,
+   "durationSec": 32.2,
    "static": false
   },
   "loss": {
@@ -22,7 +22,7 @@
    "asOf": "2026-10-30",
    "generated": "2026-10-30T18:18:05+08:00",
    "error": null,
-   "durationSec": 131.6,
+   "durationSec": 135.0,
    "static": false
   },
   "erp": {
@@ -30,13 +30,13 @@
    "asOf": "2026-11-16",
    "generated": "2026-11-16T19:50:14+08:00",
    "error": null,
-   "durationSec": 12.7,
+   "durationSec": 13.2,
    "static": false
   },
   "valuation": {
    "ok": true,
    "asOf": "2026-11-16",
-   "generated": "2026-11-16T19:53:58+08:00",
+   "generated": "2026-11-17T06:04:38+08:00",
    "error": null,
    "durationSec": 20.6,
    "static": false
@@ -44,7 +44,7 @@
   "widebase": {
    "ok": true,
    "asOf": "2026-11-16",
-   "generated": "2026-11-16T19:53:58+08:00",
+   "generated": "2026-11-17T06:04:38+08:00",
    "error": null,
    "durationSec": 0.1,
    "static": false
@@ -54,7 +54,7 @@
    "asOf": "2026-11-16",
    "generated": "2026-11-16T19:53:37+08:00",
    "error": null,
-   "durationSec": 3.3,
+   "durationSec": 3.6,
    "static": false
   },
   "swheat": {
@@ -62,7 +62,7 @@
    "asOf": "2026-11-16",
    "generated": "2026-11-16T19:53:37+08:00",
    "error": null,
-   "durationSec": 0.7,
+   "durationSec": 0.6,
    "static": false
   },
   "turnover": {
@@ -78,7 +78,7 @@
    "asOf": "2026-11-16",
    "generated": "2026-11-16T19:52:36+08:00",
    "error": null,
-   "durationSec": 81.5,
+   "durationSec": 4.3,
    "static": false
   },
   "trend": {
@@ -102,7 +102,7 @@
    "asOf": "2026-11-16",
    "generated": "2026-11-16T19:51:14+08:00",
    "error": null,
-   "durationSec": 60.1,
+   "durationSec": 60.6,
    "static": false
   },
   "fundroll": {
@@ -110,7 +110,7 @@
    "asOf": "2026-11-13",
    "generated": "2026-11-16T19:53:33+08:00",
    "error": null,
-   "durationSec": 57.4,
+   "durationSec": 68.0,
    "static": false
   },
   "investors": {

@@ -1,7 +1,7 @@
 {
  "panel": "valuation",
  "title": "主要宽基指数估值分位",
- "generated": "2026-11-16T19:53:58+08:00",
+ "generated": "2026-11-17T06:04:38+08:00",
  "asOf": "2026-11-16",
  "sources": [
   "乐咕乐股 legulegu.com（指数整体法滚动市盈率，月度）",
@@ -3173,14 +3173,14 @@
     "fallback": false
    },
    {
-    "peNow": 8.39,
-    "peDate": "2026-11-11",
+    "peNow": 8.76,
+    "peDate": "2026-11-16",
     "sampleStart": "2013-12-31",
     "sampleEnd": "2026-10-30",
     "nMonths": 155,
-    "pctAll": 77.4,
-    "pct10y": 79.2,
-    "pct5y": 98.3,
+    "pctAll": 80.6,
+    "pct10y": 80.0,
+    "pct5y": 100.0,
     "min": 4.69,
     "max": 14.3,
     "median": 7.03,
