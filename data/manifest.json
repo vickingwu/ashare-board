@@ -1,12 +1,12 @@
 {
- "generated": "2026-11-17T06:04:38+08:00",
+ "generated": "2026-11-17T20:14:46+08:00",
  "panels": {
   "coverage": {
    "ok": true,
    "asOf": "2026-11-16",
    "generated": "2026-11-17T05:59:32+08:00",
    "error": null,
-   "durationSec": 32.2,
+   "durationSec": 0.1,
    "static": false
   },
   "loss": {
@@ -27,66 +27,66 @@
   },
   "erp": {
    "ok": true,
-   "asOf": "2026-11-16",
-   "generated": "2026-11-16T19:50:14+08:00",
+   "asOf": "2026-11-17",
+   "generated": "2026-11-17T20:10:50+08:00",
    "error": null,
-   "durationSec": 13.2,
+   "durationSec": 15.0,
    "static": false
   },
   "valuation": {
    "ok": true,
-   "asOf": "2026-11-16",
-   "generated": "2026-11-17T06:04:38+08:00",
+   "asOf": "2026-11-17",
+   "generated": "2026-11-17T20:14:46+08:00",
    "error": null,
-   "durationSec": 20.6,
+   "durationSec": 16.8,
    "static": false
   },
   "widebase": {
    "ok": true,
-   "asOf": "2026-11-16",
-   "generated": "2026-11-17T06:04:38+08:00",
+   "asOf": "2026-11-17",
+   "generated": "2026-11-17T20:14:46+08:00",
    "error": null,
    "durationSec": 0.1,
    "static": false
   },
   "indheat": {
    "ok": true,
-   "asOf": "2026-11-16",
-   "generated": "2026-11-16T19:53:37+08:00",
+   "asOf": "2026-11-17",
+   "generated": "2026-11-17T20:14:27+08:00",
    "error": null,
-   "durationSec": 3.6,
+   "durationSec": 6.7,
    "static": false
   },
   "swheat": {
    "ok": true,
-   "asOf": "2026-11-16",
-   "generated": "2026-11-16T19:53:37+08:00",
+   "asOf": "2026-11-17",
+   "generated": "2026-11-17T20:14:29+08:00",
    "error": null,
-   "durationSec": 0.6,
+   "durationSec": 0.9,
    "static": false
   },
   "turnover": {
    "ok": true,
-   "asOf": "2026-11-16",
-   "generated": "2026-11-16T19:53:38+08:00",
+   "asOf": "2026-11-17",
+   "generated": "2026-11-17T20:14:29+08:00",
    "error": null,
-   "durationSec": 0.0,
+   "durationSec": 0.1,
    "static": false
   },
   "feargreed": {
    "ok": true,
-   "asOf": "2026-11-16",
-   "generated": "2026-11-16T19:52:36+08:00",
+   "asOf": "2026-11-17",
+   "generated": "2026-11-17T20:13:18+08:00",
    "error": null,
-   "durationSec": 4.3,
+   "durationSec": 89.1,
    "static": false
   },
   "trend": {
    "ok": true,
-   "asOf": "2026-11-16",
-   "generated": "2026-11-16T19:53:38+08:00",
+   "asOf": "2026-11-17",
+   "generated": "2026-11-17T20:14:29+08:00",
    "error": null,
-   "durationSec": 0.2,
+   "durationSec": 0.4,
    "static": false
   },
   "growth": {
@@ -99,34 +99,34 @@
   },
   "factors": {
    "ok": true,
-   "asOf": "2026-11-16",
-   "generated": "2026-11-16T19:51:14+08:00",
+   "asOf": "2026-11-17",
+   "generated": "2026-11-17T20:11:49+08:00",
    "error": null,
-   "durationSec": 60.6,
+   "durationSec": 59.2,
    "static": false
   },
   "fundroll": {
    "ok": true,
-   "asOf": "2026-11-13",
-   "generated": "2026-11-16T19:53:33+08:00",
+   "asOf": "2026-11-16",
+   "generated": "2026-11-17T20:14:21+08:00",
    "error": null,
-   "durationSec": 68.0,
+   "durationSec": 62.5,
    "static": false
   },
   "investors": {
    "ok": true,
-   "asOf": "2026-11-13",
-   "generated": "2026-11-16T19:53:37+08:00",
+   "asOf": "2026-11-16",
+   "generated": "2026-11-17T20:14:28+08:00",
    "error": null,
-   "durationSec": 0.0,
+   "durationSec": 0.3,
    "static": false
   },
   "symbols": {
    "ok": true,
-   "asOf": "2026-11-16",
-   "generated": "2026-11-16T19:53:37+08:00",
+   "asOf": "2026-11-17",
+   "generated": "2026-11-17T20:14:29+08:00",
    "error": null,
-   "durationSec": 0.0,
+   "durationSec": 0.1,
    "static": true
   }
  }
