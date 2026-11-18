@@ -1,8 +1,8 @@
 {
  "panel": "valuation",
  "title": "主要宽基指数估值分位",
- "generated": "2026-11-17T20:14:46+08:00",
- "asOf": "2026-11-17",
+ "generated": "2026-11-18T20:05:03+08:00",
+ "asOf": "2026-11-18",
  "sources": [
   "乐咕乐股 legulegu.com（指数整体法滚动市盈率，月度）",
   "中证指数有限公司 csindex.com.cn（指数日行情 peg 字段）"
@@ -2428,7 +2428,7 @@
    },
    {
     "peNow": 16.04,
-    "peDate": "2026-11-17",
+    "peDate": "2026-11-18",
     "sampleStart": "2011-09-29",
     "sampleEnd": "2026-10-30",
     "nMonths": 180,
@@ -2812,14 +2812,14 @@
     "fallback": false
    },
    {
-    "peNow": 54.78,
-    "peDate": "2026-11-17",
+    "peNow": 56.38,
+    "peDate": "2026-11-18",
     "sampleStart": "2020-07-31",
     "sampleEnd": "2026-10-30",
     "nMonths": 76,
-    "pctAll": 57.9,
+    "pctAll": 60.5,
     "pct10y": null,
-    "pct5y": 70.0,
+    "pct5y": 73.3,
     "min": 23.71,
     "max": 104.75,
     "median": 49.64,
@@ -2989,12 +2989,12 @@
     "fallback": false
    },
    {
-    "peNow": 34.36,
-    "peDate": "2026-11-17",
+    "peNow": 33.97,
+    "peDate": "2026-11-18",
     "sampleStart": "2023-06-30",
     "sampleEnd": "2026-10-30",
     "nMonths": 41,
-    "pctAll": 46.3,
+    "pctAll": 41.5,
     "pct10y": null,
     "pct5y": null,
     "min": 23.74,
@@ -3096,8 +3096,8 @@
     "fallback": false
    },
    {
-    "peNow": 14.25,
-    "peDate": "2026-11-17",
+    "peNow": 14.28,
+    "peDate": "2026-11-18",
     "sampleStart": "2024-09-30",
     "sampleEnd": "2026-10-30",
     "nMonths": 26,
@@ -3173,8 +3173,8 @@
     "fallback": false
    },
    {
-    "peNow": 8.78,
-    "peDate": "2026-11-17",
+    "peNow": 8.8,
+    "peDate": "2026-11-18",
     "sampleStart": "2013-12-31",
     "sampleEnd": "2026-10-30",
     "nMonths": 155,
