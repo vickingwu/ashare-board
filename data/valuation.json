@@ -1,7 +1,7 @@
 {
  "panel": "valuation",
  "title": "主要宽基指数估值分位",
- "generated": "2026-11-18T20:05:03+08:00",
+ "generated": "2026-11-19T04:33:57+08:00",
  "asOf": "2026-11-18",
  "sources": [
   "乐咕乐股 legulegu.com（指数整体法滚动市盈率，月度）",
@@ -18,14 +18,14 @@
  "data": {
   "indexes": [
    {
-    "peNow": 12.64,
-    "peDate": "2026-11-17",
+    "peNow": 12.69,
+    "peDate": "2026-11-18",
     "sampleStart": "2005-04-29",
     "sampleEnd": "2026-10-30",
     "nMonths": 259,
-    "pctAll": 52.5,
-    "pct10y": 61.7,
-    "pct5y": 75.0,
+    "pctAll": 53.7,
+    "pct10y": 64.2,
+    "pct5y": 76.7,
     "min": 7.96,
     "max": 47.84,
     "median": 12.5,
@@ -561,14 +561,14 @@
     "fallback": false
    },
    {
-    "peNow": 21.67,
-    "peDate": "2026-11-17",
+    "peNow": 21.7,
+    "peDate": "2026-11-18",
     "sampleStart": "2007-01-31",
     "sampleEnd": "2026-10-30",
     "nMonths": 238,
-    "pctAll": 32.8,
-    "pct10y": 57.5,
-    "pct5y": 66.7,
+    "pctAll": 33.2,
+    "pct10y": 58.3,
+    "pct5y": 68.3,
     "min": 14.29,
     "max": 64.53,
     "median": 24.97,
@@ -1062,14 +1062,14 @@
     "fallback": false
    },
    {
-    "peNow": 23.85,
-    "peDate": "2026-11-17",
+    "peNow": 23.69,
+    "peDate": "2026-11-18",
     "sampleStart": "2014-10-31",
     "sampleEnd": "2026-10-30",
     "nMonths": 145,
-    "pctAll": 26.9,
-    "pct10y": 32.5,
-    "pct5y": 41.7,
+    "pctAll": 25.5,
+    "pct10y": 30.8,
+    "pct5y": 40.0,
     "min": 17.62,
     "max": 99.36,
     "median": 28.08,
@@ -1377,12 +1377,12 @@
     "fallback": false
    },
    {
-    "peNow": 13.65,
-    "peDate": "2026-11-17",
+    "peNow": 13.7,
+    "peDate": "2026-11-18",
     "sampleStart": "2007-01-31",
     "sampleEnd": "2026-10-30",
     "nMonths": 238,
-    "pctAll": 52.1,
+    "pctAll": 52.5,
     "pct10y": 60.8,
     "pct5y": 75.0,
     "min": 9.02,
@@ -1878,8 +1878,8 @@
     "fallback": false
    },
    {
-    "peNow": 11.76,
-    "peDate": "2026-11-17",
+    "peNow": 11.78,
+    "peDate": "2026-11-18",
     "sampleStart": "2005-01-31",
     "sampleEnd": "2026-10-30",
     "nMonths": 262,
