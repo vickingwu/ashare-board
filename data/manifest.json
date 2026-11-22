@@ -1,12 +1,12 @@
 {
- "generated": "2026-11-21T04:17:54+08:00",
+ "generated": "2026-11-22T11:38:49+08:00",
  "panels": {
   "coverage": {
    "ok": true,
    "asOf": "2026-11-20",
    "generated": "2026-11-21T04:12:54+08:00",
    "error": null,
-   "durationSec": 35.8,
+   "durationSec": 35.1,
    "static": false
   },
   "loss": {
@@ -22,7 +22,7 @@
    "asOf": "2026-10-30",
    "generated": "2026-10-30T18:18:05+08:00",
    "error": null,
-   "durationSec": 130.9,
+   "durationSec": 131.6,
    "static": false
   },
   "erp": {
@@ -30,7 +30,7 @@
    "asOf": "2026-11-20",
    "generated": "2026-11-20T19:58:47+08:00",
    "error": null,
-   "durationSec": 14.3,
+   "durationSec": 12.7,
    "static": false
   },
   "valuation": {
@@ -38,7 +38,7 @@
    "asOf": "2026-11-20",
    "generated": "2026-11-20T20:02:42+08:00",
    "error": null,
-   "durationSec": 17.6,
+   "durationSec": 20.5,
    "static": false
   },
   "widebase": {
@@ -54,15 +54,15 @@
    "asOf": "2026-11-20",
    "generated": "2026-11-20T20:02:27+08:00",
    "error": null,
-   "durationSec": 4.0,
+   "durationSec": 2.8,
    "static": false
   },
   "swheat": {
-   "ok": true,
+   "ok": false,
    "asOf": "2026-11-20",
    "generated": "2026-11-20T20:02:29+08:00",
-   "error": null,
-   "durationSec": 0.7,
+   "error": "PanelError: 申万一级行业应为 31 个，接口返回 0 个",
+   "durationSec": 0.4,
    "static": false
   },
   "turnover": {
@@ -76,17 +76,17 @@
   "feargreed": {
    "ok": true,
    "asOf": "2026-11-20",
-   "generated": "2026-11-20T20:01:19+08:00",
+   "generated": "2026-11-22T11:37:18+08:00",
    "error": null,
-   "durationSec": 4.1,
+   "durationSec": 4.8,
    "static": false
   },
   "trend": {
-   "ok": true,
+   "ok": false,
    "asOf": "2026-11-20",
    "generated": "2026-11-20T20:02:29+08:00",
-   "error": null,
-   "durationSec": 0.3,
+   "error": "PanelError: 申万一级行业应为 31 个，接口返回 0 个",
+   "durationSec": 0.8,
    "static": false
   },
   "growth": {
@@ -102,7 +102,7 @@
    "asOf": "2026-11-20",
    "generated": "2026-11-20T19:59:50+08:00",
    "error": null,
-   "durationSec": 58.6,
+   "durationSec": 61.6,
    "static": false
   },
   "fundroll": {
@@ -110,15 +110,15 @@
    "asOf": "2026-11-19",
    "generated": "2026-11-20T20:02:19+08:00",
    "error": null,
-   "durationSec": 69.4,
+   "durationSec": 66.4,
    "static": false
   },
   "investors": {
    "ok": true,
-   "asOf": "2026-11-19",
-   "generated": "2026-11-20T20:02:28+08:00",
+   "asOf": "2026-11-20",
+   "generated": "2026-11-22T11:38:27+08:00",
    "error": null,
-   "durationSec": 0.0,
+   "durationSec": 0.3,
    "static": false
   },
   "symbols": {
