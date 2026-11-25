@@ -76,7 +76,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
-      - uses: actions/checkout@v4
+      # checkout 停在 v5（纯 Node 24 升级）：v6 改成把凭据写到单独文件，而本作业
+      # 靠 persist-credentials 直接 git push，不动这块更稳。
+      - uses: actions/checkout@v5
         with:
           persist-credentials: true
 
@@ -89,7 +91,7 @@ jobs:
           restore-keys: |
             etl-cache-
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -110,7 +112,8 @@ jobs:
             python etl/build_data.py --verbose
           fi
 
-      - uses: actions/upload-artifact@v4
+      # v6 才是真正默认跑 Node 24 的版本（v5 只是「preliminary support」，默认仍是 Node 20）
+      - uses: actions/upload-artifact@v6
         with:
           name: logs
           path: logs/
@@ -132,27 +135,53 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      # 两个 id 取其一：第一次成功时 retry 没跑、outputs 为空，反之亦然
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment_retry.outputs.page_url }}
     steps:
       # 必须显式取 main 的最新提交：github.sha 是本次运行开始时的提交，不含 update 刚推送的数据
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: main
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
       - run: python scripts/build_site.py
 
       # enablement: true —— 仓库还没开 Pages 时自动按「GitHub Actions」方式开启；token 权限不够时这一步会报错，按 README「启用步骤」手工开启即可
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
         with:
           enablement: true
 
-      - uses: actions/upload-pages-artifact@v3
+      # include-hidden-files 必须显式打开：v3 原样打包一切，但 v4 起默认加
+      # `--exclude=.[^/]*`，会把 _site/.nojekyll 悄悄丢掉 —— 那个文件一没，Pages
+      # 就会拿 Jekyll 去处理站点。这是升级到 v5 时唯一需要补的参数。
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
+          include-hidden-files: true
 
+      # deploy-pages 的 artifact 元数据查询是**一次性**的：内部调一次 ListArtifacts
+      # 按名字过滤，没命中就直接报错，v4 和最新的 v5.0.1 都没有重试（v5.0.1 加的
+      # backoff 只用在后面的 deployment 状态轮询上）。而 artifact 列表有一致性延迟，
+      # 偶发返回还没包含刚上传的 github-pages 的旧列表，日志里就是
+      #     Found 1 artifact(s)
+      #     Error: No artifacts named "github-pages" were found for this workflow run.
+      # 那 1 个是 update 作业早 19 秒上传的 logs。2026-11-20 的 run #101/#102 和
+      # 11-23 的 #105/#107 四次失败都是这个竞态（上传步骤本身全部 success，
+      # 日志里能看到 "Artifact github-pages has been successfully uploaded"）。
+      # 查询失败时还没创建 deployment，所以直接重跑一次是干净的。
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5.0.1
+        continue-on-error: true
+
+      # 立刻重试没意义，等一会儿让 artifact 列表追上来（四次失败都发生在上传后 1 秒内）
+      - name: 失败后等 artifact 列表追上
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 30
+
+      - name: 重试发布（artifact 列表一致性延迟）
+        if: steps.deployment.outcome == 'failure'
+        id: deployment_retry
+        uses: actions/deploy-pages@v5.0.1
