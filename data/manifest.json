@@ -1,12 +1,12 @@
 {
- "generated": "2026-11-25T21:20:40+08:00",
+ "generated": "2026-11-26T05:45:28+08:00",
  "panels": {
   "coverage": {
    "ok": true,
-   "asOf": "2026-11-24",
-   "generated": "2026-11-25T06:24:25+08:00",
+   "asOf": "2026-11-25",
+   "generated": "2026-11-26T05:40:27+08:00",
    "error": null,
-   "durationSec": 0.1,
+   "durationSec": 36.0,
    "static": false
   },
   "loss": {
@@ -22,7 +22,7 @@
    "asOf": "2026-10-30",
    "generated": "2026-10-30T18:18:05+08:00",
    "error": null,
-   "durationSec": 131.0,
+   "durationSec": 132.6,
    "static": false
   },
   "erp": {
@@ -30,7 +30,7 @@
    "asOf": "2026-11-25",
    "generated": "2026-11-25T21:17:01+08:00",
    "error": null,
-   "durationSec": 12.1,
+   "durationSec": 14.0,
    "static": false
   },
   "valuation": {
@@ -38,7 +38,7 @@
    "asOf": "2026-11-25",
    "generated": "2026-11-25T21:20:40+08:00",
    "error": null,
-   "durationSec": 17.2,
+   "durationSec": 18.3,
    "static": false
   },
   "widebase": {
@@ -54,7 +54,7 @@
    "asOf": "2026-11-25",
    "generated": "2026-11-25T21:20:21+08:00",
    "error": null,
-   "durationSec": 5.2,
+   "durationSec": 4.4,
    "static": false
   },
   "swheat": {
@@ -70,7 +70,7 @@
    "asOf": "2026-11-25",
    "generated": "2026-11-25T21:20:23+08:00",
    "error": null,
-   "durationSec": 0.1,
+   "durationSec": 0.0,
    "static": false
   },
   "feargreed": {
@@ -78,7 +78,7 @@
    "asOf": "2026-11-25",
    "generated": "2026-11-25T21:19:14+08:00",
    "error": null,
-   "durationSec": 69.9,
+   "durationSec": 4.8,
    "static": false
   },
   "trend": {
@@ -102,7 +102,7 @@
    "asOf": "2026-11-25",
    "generated": "2026-11-25T21:18:04+08:00",
    "error": null,
-   "durationSec": 63.4,
+   "durationSec": 60.1,
    "static": false
   },
   "fundroll": {
@@ -110,7 +110,7 @@
    "asOf": "2026-11-24",
    "generated": "2026-11-25T21:20:16+08:00",
    "error": null,
-   "durationSec": 61.8,
+   "durationSec": 65.9,
    "static": false
   },
   "investors": {
@@ -118,7 +118,7 @@
    "asOf": "2026-11-24",
    "generated": "2026-11-25T21:20:22+08:00",
    "error": null,
-   "durationSec": 0.2,
+   "durationSec": 0.0,
    "static": false
   },
   "symbols": {
